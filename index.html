@@ -1,0 +1,100 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#115e59" />
+    <title>Gestao Financeira Casa e Empresa</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="loginScreen" class="login-screen">
+      <section class="login-panel">
+        <div>
+          <p class="eyebrow">Casa e Empresa</p>
+          <h1>Gestao Financeira</h1>
+          <p class="muted">Entre para controlar contas pagas, vencendo, cartoes e lembretes mensais.</p>
+        </div>
+        <form id="loginForm" class="login-form">
+          <label>Usuario<input id="loginUser" type="text" autocomplete="username" value="admin" required /></label>
+          <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" value="1234" required /></label>
+          <button class="primary-button" type="submit">Entrar</button>
+          <p class="hint">Acesso inicial: admin / 1234</p>
+        </form>
+      </section>
+    </main>
+
+    <main id="appScreen" class="app-shell hidden">
+      <aside class="sidebar">
+        <div><p class="eyebrow">Financeiro</p><h2>Controle mensal</h2></div>
+        <nav class="nav-list" aria-label="Areas">
+          <button class="nav-item active" data-view="dashboard" type="button">Painel</button>
+          <button class="nav-item" data-view="bills" type="button">Contas</button>
+          <button class="nav-item" data-view="cards" type="button">Cartoes</button>
+          <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
+        </nav>
+        <button id="logoutButton" class="ghost-button" type="button">Sair</button>
+      </aside>
+
+      <section class="content">
+        <header class="topbar">
+          <div><p id="todayLabel" class="eyebrow"></p><h1 id="pageTitle">Painel</h1></div>
+          <div class="filters">
+            <label>Mes<input id="monthFilter" type="month" /></label>
+            <label>Perfil<select id="profileFilter"><option value="all">Casa + Empresa</option><option value="Casa">Casa</option><option value="Empresa">Empresa</option></select></label>
+          </div>
+        </header>
+
+        <section id="dashboardView" class="view active-view">
+          <div class="summary-grid">
+            <article class="metric"><span>Total do mes</span><strong id="metricTotal">R$ 0,00</strong><small id="metricTotalCount">0 contas</small></article>
+            <article class="metric paid"><span>Pago</span><strong id="metricPaid">R$ 0,00</strong><small id="metricPaidCount">0 contas</small></article>
+            <article class="metric due"><span>A vencer</span><strong id="metricPending">R$ 0,00</strong><small id="metricPendingCount">0 contas</small></article>
+            <article class="metric late"><span>Vencidas</span><strong id="metricOverdue">R$ 0,00</strong><small id="metricOverdueCount">0 contas</small></article>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel"><div class="panel-title"><h2>Situacao das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><canvas id="statusChart" width="280" height="280" aria-label="Grafico de contas"></canvas></div></section>
+            <section class="panel"><div class="panel-title"><h2>Proximos vencimentos</h2><span>7 dias</span></div><div id="upcomingList" class="stack-list"></div></section>
+          </div>
+        </section>
+
+        <section id="billsView" class="view">
+          <section class="panel form-panel"><div class="panel-title"><h2>Adicionar conta</h2></div>
+            <form id="billForm" class="data-form">
+              <input type="hidden" id="billId" />
+              <label>Nome<input id="billName" type="text" placeholder="Ex: Aluguel" required /></label>
+              <label>Valor<input id="billAmount" type="number" min="0" step="0.01" placeholder="0,00" required /></label>
+              <label>Vencimento<input id="billDueDate" type="date" required /></label>
+              <label>Perfil<select id="billProfile"><option>Casa</option><option>Empresa</option></select></label>
+              <label>Categoria<select id="billCategory"><option>Moradia</option><option>Servicos</option><option>Cartao</option><option>Impostos</option><option>Saude</option><option>Equipe</option><option>Outros</option></select></label>
+              <label>Status<select id="billStatus"><option value="pending">A vencer</option><option value="paid">Pago</option></select></label>
+              <button class="primary-button" type="submit">Salvar conta</button>
+              <button id="cancelEditButton" class="ghost-button hidden" type="button">Cancelar edicao</button>
+            </form>
+          </section>
+          <section class="panel"><div class="panel-title"><h2>Contas do mes</h2><button id="exportButton" class="ghost-button" type="button">Exportar CSV</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead><tbody id="billTable"></tbody></table></div>
+          </section>
+        </section>
+
+        <section id="cardsView" class="view">
+          <section class="panel form-panel"><div class="panel-title"><h2>Adicionar cartao</h2></div>
+            <form id="cardForm" class="data-form">
+              <label>Nome<input id="cardName" type="text" placeholder="Ex: Nubank" required /></label>
+              <label>Limite<input id="cardLimit" type="number" min="0" step="0.01" required /></label>
+              <label>Fechamento<input id="cardCloseDay" type="number" min="1" max="31" required /></label>
+              <label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" required /></label>
+              <label>Perfil<select id="cardProfile"><option>Casa</option><option>Empresa</option></select></label>
+              <button class="primary-button" type="submit">Salvar cartao</button>
+            </form>
+          </section>
+          <div id="cardList" class="card-grid"></div>
+        </section>
+
+        <section id="remindersView" class="view"><section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgencia</span></div><div id="reminderList" class="stack-list"></div></section></section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
