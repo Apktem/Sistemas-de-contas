@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -16,8 +16,11 @@ export class MemoryStorage {
   async deleteBill(userId, id) { const before = this.bills.length; this.bills = this.bills.filter((item) => !(item.id === id && item.userId === userId)); return this.bills.length < before; }
   async createCard(userId, data) { const card = { id: randomUUID(), userId, ...data }; this.cards.push(card); return card; }
   async deleteCard(userId, id) { const before = this.cards.length; this.cards = this.cards.filter((item) => !(item.id === id && item.userId === userId)); return this.cards.length < before; }
-  async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
-  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
+  async getSubscription(userId) { return this.subscriptions.find((item) => item.userId === userId) || null; }
+  async getSubscriptionByProviderId(providerId) { return this.subscriptions.find((item) => item.providerId === providerId) || null; }
+  async upsertSubscription(data) { const index = this.subscriptions.findIndex((item) => item.userId === data.userId); const item = { ...(index >= 0 ? this.subscriptions[index] : {}), ...data }; if (index >= 0) this.subscriptions[index] = item; else this.subscriptions.push(item); return item; }
+  async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter((item) => item.status === "authorized").length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
+  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && item.status === "authorized") ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null, billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
   async setUserActive(id, active) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.active = active; return publicUser(user); }
   async setUserRole(id, role) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.role = role; return publicUser(user); }
 }
@@ -90,25 +93,49 @@ class SupabaseStorage {
     check(error); return Boolean(data);
   }
 
+  async getSubscription(userId) {
+    const { data, error } = await this.client.from("subscriptions").select("*").eq("user_id", userId).maybeSingle();
+    if (isMissingSubscriptionTable(error)) return null;
+    check(error); return data ? mapSubscription(data) : null;
+  }
+
+  async getSubscriptionByProviderId(providerId) {
+    const { data, error } = await this.client.from("subscriptions").select("*").eq("provider_id", providerId).maybeSingle();
+    if (isMissingSubscriptionTable(error)) return null;
+    check(error); return data ? mapSubscription(data) : null;
+  }
+
+  async upsertSubscription(data) {
+    const row = { user_id: data.userId, provider_id: data.providerId, payer_email: data.payerEmail, status: data.status, next_payment_date: data.nextPaymentDate, updated_at: data.updatedAt || new Date().toISOString() };
+    const { data: saved, error } = await this.client.from("subscriptions").upsert(row, { onConflict: "user_id" }).select("*").single();
+    if (isMissingSubscriptionTable(error)) { const migrationError = new Error("A tabela de assinaturas ainda nao foi criada no Supabase."); migrationError.status = 503; throw migrationError; }
+    check(error); return mapSubscription(saved);
+  }
+
   async adminOverview() {
-    const [usersResult, activeResult, billsResult] = await Promise.all([
+    const [usersResult, activeResult, billsResult, subscriptionsResult] = await Promise.all([
       this.client.from("users").select("*", { count: "exact", head: true }),
       this.client.from("users").select("*", { count: "exact", head: true }).eq("active", true),
       this.client.from("bills").select("amount"),
+      this.client.from("subscriptions").select("status"),
     ]);
     check(usersResult.error); check(activeResult.error); check(billsResult.error);
-    return { users: usersResult.count || 0, activeUsers: activeResult.count || 0, bills: billsResult.data.length, totalAmount: billsResult.data.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+    const subscriptions = isMissingSubscriptionTable(subscriptionsResult.error) ? [] : (check(subscriptionsResult.error), subscriptionsResult.data);
+    return { users: usersResult.count || 0, activeUsers: activeResult.count || 0, proUsers: subscriptions.filter((item) => item.status === "authorized").length, bills: billsResult.data.length, totalAmount: billsResult.data.reduce((sum, bill) => sum + Number(bill.amount), 0) };
   }
 
   async adminUsers() {
-    const [{ data: users, error: usersError }, { data: bills, error: billsError }] = await Promise.all([
+    const [{ data: users, error: usersError }, { data: bills, error: billsError }, subscriptionsResult] = await Promise.all([
       this.client.from("users").select("id, identifier_type, identifier_label, role, active, created_at").order("created_at", { ascending: false }),
       this.client.from("bills").select("user_id, amount"),
+      this.client.from("subscriptions").select("user_id, status"),
     ]);
     check(usersError); check(billsError);
+    const subscriptions = isMissingSubscriptionTable(subscriptionsResult.error) ? [] : (check(subscriptionsResult.error), subscriptionsResult.data);
     return users.map((user) => {
       const userBills = bills.filter((bill) => bill.user_id === user.id);
-      return { ...mapUser(user), billCount: userBills.length, totalAmount: userBills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+      const subscription = subscriptions.find((item) => item.user_id === user.id);
+      return { ...mapUser(user), plan: user.role === "admin" || subscription?.status === "authorized" ? "pro" : "free", subscriptionStatus: subscription?.status || null, billCount: userBills.length, totalAmount: userBills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
     });
   }
 
@@ -126,6 +153,7 @@ class SupabaseStorage {
 function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.name, amount: data.amount, due_date: data.dueDate, profile: data.profile, category: data.category, status: data.status }; }
 function mapBill(row) { return { id: row.id, name: row.name, amount: Number(row.amount), dueDate: row.due_date, profile: row.profile, category: row.category, status: row.status }; }
 function mapCard(row) { return { id: row.id, name: row.name, limit: Number(row.credit_limit), closeDay: row.close_day, dueDay: row.due_day, profile: row.profile }; }
+function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }
 function mapUser(row, includePassword = false) {
   const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, role: row.role, active: Boolean(row.active), createdAt: row.created_at };
   if (includePassword) user.passwordHash = row.password_hash;
@@ -133,6 +161,7 @@ function mapUser(row, includePassword = false) {
 }
 function publicUser(user) { return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt }; }
 function check(error) { if (error) { const wrapped = new Error(error.message); wrapped.code = error.code; throw wrapped; } }
+function isMissingSubscriptionTable(error) { return error?.code === "42P01" || error?.code === "PGRST205"; }
 function duplicateError() { const error = new Error("Conta já cadastrada."); error.code = "ER_DUP_ENTRY"; return error; }
 function isPublicKey(key) {
   if (key.startsWith("sb_publishable_")) return true;

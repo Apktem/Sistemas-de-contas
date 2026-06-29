@@ -66,6 +66,41 @@ test("promove automaticamente o e-mail principal para administrador", async (con
   assert.equal((await storage.findUser("email", "apktemoficial@gmail.com")).role, "admin");
 });
 
+test("aplica limites gratis e libera recursos apos assinatura Pro", async (context) => {
+  const storage = new MemoryStorage();
+  let remoteStatus = "pending";
+  const payments = {
+    configured: true,
+    price: 29.9,
+    async create(userId, payerEmail) { return { id: "sub-123", external_reference: userId, payer_email: payerEmail, status: remoteStatus, init_point: "https://checkout.example/sub-123" }; },
+    async get(id) { return { id, external_reference: storage.users[0].id, payer_email: "cliente@example.com", status: remoteStatus }; },
+    async cancel(id) { return { id, external_reference: storage.users[0].id, payer_email: "cliente@example.com", status: "cancelled" }; },
+  };
+  const app = await createApp({
+    storage,
+    payments,
+    sessionSecret: "test-session-secret-with-more-than-32-characters",
+    cpfPepper: "test-cpf-pepper-with-more-than-32-characters",
+    env: { ADMIN_EMAIL: "admin@example.com" },
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const account = await post(base, "/api/register", { identifier: "cliente@example.com", password: "SenhaForte123" });
+  const card = { name: "Nubank", limit: 1000, closeDay: 5, dueDay: 12, profile: "Casa" };
+  assert.equal((await post(base, "/api/cards", card, account.cookie)).status, 201);
+  assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 402);
+
+  const checkout = await post(base, "/api/subscription/checkout", { payerEmail: "cliente@example.com" }, account.cookie);
+  assert.equal(checkout.status, 201);
+  assert.equal(checkout.body.checkoutUrl, "https://checkout.example/sub-123");
+  remoteStatus = "authorized";
+  const synced = await post(base, "/api/subscription/sync", {}, account.cookie);
+  assert.equal(synced.body.plan, "pro");
+  assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 201);
+});
+
 async function post(base, path, body, cookie = "") {
   const response = await fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
   return { status: response.status, body: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };

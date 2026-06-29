@@ -13,9 +13,10 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
+body { margin: 0; min-height: 100vh; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
 .hidden { display: none !important; }
 .eyebrow { margin: 0 0 8px; color: var(--brand); font-size: .78rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
 .muted { color: var(--muted); }
@@ -90,6 +91,18 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
 .progress { height: 10px; overflow: hidden; border-radius: 999px; background: #e6ecea; }
 .progress span { display: block; height: 100%; background: var(--brand); }
 .admin-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.plan-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.plan-option.featured { border-top: 5px solid var(--brand); }
+.plan-option.current { box-shadow: 0 0 0 3px rgba(17, 94, 89, .16); }
+.plan-option h2 { margin: 8px 0; font-size: 1.35rem; }
+.plan-option strong { display: block; font-size: 1.75rem; }
+.plan-option small { color: var(--muted); }
+.plan-option ul { display: grid; gap: 9px; align-content: center; margin: 0; padding-left: 20px; color: var(--muted); }
+.plan-label { color: var(--brand); font-size: .76rem; font-weight: 700; text-transform: uppercase; }
+.subscription-panel { max-width: 760px; }
+.subscription-form { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 12px; align-items: end; }
+.subscription-actions { justify-content: flex-start; margin-top: 14px; }
 
 @media (max-width: 1000px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -97,10 +110,10 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
 }
 
 @media (max-width: 800px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; gap: 16px; padding: 18px; }
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: static; min-width: 0; height: auto; gap: 16px; padding: 18px; }
   .sidebar-head { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-  .nav-list { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow-x: auto; }
+  .nav-list { grid-template-columns: repeat(6, minmax(0, 1fr)); overflow-x: auto; }
   .nav-item { padding: 0 10px; text-align: center; white-space: nowrap; }
   .sidebar .ghost-button { position: absolute; top: 18px; right: 18px; min-height: 36px; }
   .user-badge { padding-right: 70px; }
@@ -116,7 +129,7 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
   .sidebar-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
   .user-badge { width: 100%; padding-right: 70px; }
   .topbar { display: grid; }
-  .filters, .summary-grid, .data-form { grid-template-columns: 1fr; }
+  .filters, .summary-grid, .data-form, .plan-grid, .subscription-form { grid-template-columns: 1fr; }
   .nav-list { grid-template-columns: repeat(3, minmax(110px, 1fr)); }
   .metric strong { font-size: 1.25rem; }
   .panel { padding: 14px; }
@@ -124,4 +137,5 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
   .list-row { grid-template-columns: 1fr; }
   .badge { width: fit-content; }
   .row-actions { justify-content: flex-start; }
+  .plan-option { grid-template-columns: 1fr; }
 }

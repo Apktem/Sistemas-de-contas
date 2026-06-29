@@ -40,8 +40,20 @@ create table if not exists public.cards (
 
 create index if not exists cards_user_idx on public.cards(user_id);
 
+create table if not exists public.subscriptions (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  provider_id text not null unique,
+  payer_email text,
+  status text not null default 'pending',
+  next_payment_date timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists subscriptions_status_idx on public.subscriptions(status);
+
 alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
+alter table public.subscriptions enable row level security;
 
-revoke all on public.users, public.bills, public.cards from anon, authenticated;
+revoke all on public.users, public.bills, public.cards, public.subscriptions from anon, authenticated;

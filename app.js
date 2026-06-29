@@ -1,5 +1,5 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const state = { user: null, bills: [], cards: [], adminUsers: [] };
+const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 const els = {
@@ -36,8 +36,12 @@ async function enterApp(user) {
   $("#adminNav").classList.toggle("hidden", user.role !== "admin");
   els.loginScreen.classList.add("hidden");
   els.appScreen.classList.remove("hidden");
-  await loadData();
-  switchView("dashboard", "Painel");
+  await Promise.all([loadData(), loadSubscription()]);
+  if (new URLSearchParams(location.search).get("assinatura") === "retorno") {
+    history.replaceState({}, "", location.pathname);
+    await loadSubscription(true);
+    switchView("subscription", "Assinatura");
+  } else switchView("dashboard", "Painel");
 }
 
 async function loadData() {
@@ -45,6 +49,32 @@ async function loadData() {
   state.bills = data.bills;
   state.cards = data.cards;
   render();
+}
+
+async function loadSubscription(sync = false) {
+  state.subscription = await api(sync ? "/api/subscription/sync" : "/api/subscription", sync ? { method: "POST" } : {});
+  renderSubscription();
+}
+
+function renderSubscription() {
+  const subscription = state.subscription;
+  if (!subscription) return;
+  const isPro = subscription.plan === "pro";
+  const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada" };
+  $("#subscriptionTitle").textContent = isPro ? "Plano Pro" : "Plano Grátis";
+  $("#subscriptionDescription").textContent = isPro ? `Recursos ilimitados${subscription.nextPaymentDate ? ` · próxima cobrança em ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Faça o upgrade para cadastrar contas e cartões sem limites.";
+  $("#subscriptionBadge").textContent = labels[subscription.status] || (isPro ? "Ativa" : "Grátis");
+  $("#subscriptionBadge").className = `badge ${isPro ? "active" : subscription.status === "pending" ? "pending" : "inactive"}`;
+  $("#billingEmail").value = subscription.payerEmail || (state.user.identifierType === "email" ? state.user.identifierLabel : "");
+  $("#subscriptionForm").classList.toggle("hidden", isPro || subscription.status === "pending");
+  $("#cancelSubscription").classList.toggle("hidden", !subscription.status || subscription.status === "cancelled" || state.user.role === "admin");
+  $("#syncSubscription").classList.toggle("hidden", !subscription.status);
+  $("#subscribeButton").disabled = !subscription.configured;
+  if (!subscription.configured && !isPro) $("#subscriptionDescription").textContent = "O checkout estará disponível assim que a integração do Mercado Pago for ativada.";
+  $(".plan-option:first-child").classList.toggle("current", !isPro);
+  $(".plan-option.featured").classList.toggle("current", isPro);
+  $(".plan-option:first-child .plan-label").textContent = isPro ? "Plano disponível" : "Plano atual";
+  $(".plan-option.featured .plan-label").textContent = isPro ? "Plano atual" : "Mais completo";
 }
 
 function getFilteredBills() {
@@ -165,8 +195,9 @@ function switchView(view, title) {
   $$(".view").forEach((item) => item.classList.remove("active-view"));
   $(`#${view}View`).classList.add("active-view");
   $("#pageTitle").textContent = title;
-  els.financeFilters.classList.toggle("hidden", view === "admin");
+  els.financeFilters.classList.toggle("hidden", view === "admin" || view === "subscription");
   if (view === "admin") loadAdmin();
+  if (view === "subscription") loadSubscription();
 }
 
 async function loadAdmin() {
@@ -175,7 +206,8 @@ async function loadAdmin() {
     const [overview, usersData] = await Promise.all([api("/api/admin/overview"), api("/api/admin/users")]);
     state.adminUsers = usersData.users;
     $("#adminUsers").textContent = overview.users;
-    $("#adminActiveUsers").textContent = overview.activeUsers;
+    $("#adminActiveText").textContent = `${overview.activeUsers} ativos`;
+    $("#adminProUsers").textContent = overview.proUsers;
     $("#adminBills").textContent = overview.bills;
     $("#adminTotal").textContent = money.format(Number(overview.totalAmount));
     renderAdminUsers();
@@ -183,7 +215,7 @@ async function loadAdmin() {
 }
 
 function renderAdminUsers() {
-  $("#adminUserTable").innerHTML = state.adminUsers.map((user) => `<tr><td>${escapeHtml(user.identifierLabel)}</td><td>${user.role === "admin" ? "Administrador" : "Usuário"}</td><td>${new Date(user.createdAt).toLocaleDateString("pt-BR")}</td><td>${user.billCount}</td><td>${money.format(Number(user.totalAmount))}</td><td><span class="badge ${user.active ? "active" : "inactive"}">${user.active ? "Ativo" : "Inativo"}</span></td><td><div class="row-actions"><button class="small-button" data-admin-view="${user.id}" type="button">Ver financeiro</button>${user.id === state.user.id ? "" : `<button class="small-button" data-admin-status="${user.id}" data-active="${!user.active}" type="button">${user.active ? "Desativar" : "Ativar"}</button>`}</div></td></tr>`).join("");
+  $("#adminUserTable").innerHTML = state.adminUsers.map((user) => `<tr><td>${escapeHtml(user.identifierLabel)}</td><td>${user.role === "admin" ? "Administrador" : "Usuário"}</td><td><span class="badge ${user.plan === "pro" ? "active" : "inactive"}">${user.plan === "pro" ? "Pro" : "Grátis"}</span></td><td>${new Date(user.createdAt).toLocaleDateString("pt-BR")}</td><td>${user.billCount}</td><td>${money.format(Number(user.totalAmount))}</td><td><span class="badge ${user.active ? "active" : "inactive"}">${user.active ? "Ativo" : "Inativo"}</span></td><td><div class="row-actions"><button class="small-button" data-admin-view="${user.id}" type="button">Ver financeiro</button>${user.id === state.user.id ? "" : `<button class="small-button" data-admin-status="${user.id}" data-active="${!user.active}" type="button">${user.active ? "Desativar" : "Ativar"}</button>`}</div></td></tr>`).join("");
 }
 
 async function showAdminUser(id) {
@@ -272,6 +304,22 @@ $("#cardList").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-card-delete]");
   if (!button) return;
   try { await api(`/api/cards/${button.dataset.cardDelete}`, { method: "DELETE" }); await loadData(); } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+$("#subscriptionForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage(els.appMessage);
+  try {
+    const result = await api("/api/subscription/checkout", { method: "POST", body: JSON.stringify({ payerEmail: $("#billingEmail").value }) });
+    location.href = result.checkoutUrl;
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
+$("#syncSubscription").addEventListener("click", async () => {
+  try { await loadSubscription(true); setMessage(els.appMessage, "Situação da assinatura atualizada.", true); } catch (error) { setMessage(els.appMessage, error.message); }
+});
+$("#cancelSubscription").addEventListener("click", async () => {
+  if (!confirm("Cancelar a renovação do plano Pro?")) return;
+  try { state.subscription = await api("/api/subscription/cancel", { method: "POST" }); renderSubscription(); setMessage(els.appMessage, "Assinatura cancelada.", true); } catch (error) { setMessage(els.appMessage, error.message); }
 });
 
 $("#refreshAdmin").addEventListener("click", loadAdmin);
