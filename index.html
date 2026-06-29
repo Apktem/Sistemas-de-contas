@@ -45,6 +45,7 @@
           <button class="nav-item" data-view="bills" type="button">Contas</button>
           <button class="nav-item" data-view="cards" type="button">Cartões</button>
           <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
+          <button class="nav-item" data-view="subscription" type="button">Assinatura</button>
           <button id="adminNav" class="nav-item hidden" data-view="admin" type="button">Administração</button>
         </nav>
         <button id="logoutButton" class="ghost-button" type="button">Sair</button>
@@ -108,15 +109,39 @@
 
         <section id="remindersView" class="view"><section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section></section>
 
+        <section id="subscriptionView" class="view">
+          <div class="plan-grid">
+            <article class="plan-option">
+              <div><span class="plan-label">Plano atual</span><h2>Grátis</h2><strong>R$ 0</strong><small>para começar</small></div>
+              <ul><li>Até 10 contas por mês</li><li>1 cartão</li><li>Painel e lembretes</li></ul>
+            </article>
+            <article class="plan-option featured">
+              <div><span class="plan-label">Mais completo</span><h2>Pro</h2><strong>R$ 29,90</strong><small>por mês</small></div>
+              <ul><li>Contas ilimitadas</li><li>Cartões ilimitados</li><li>Todos os recursos atuais</li></ul>
+            </article>
+          </div>
+          <section class="panel subscription-panel">
+            <div class="panel-title"><div><h2 id="subscriptionTitle">Seu plano</h2><p id="subscriptionDescription" class="muted"></p></div><span id="subscriptionBadge" class="badge"></span></div>
+            <form id="subscriptionForm" class="subscription-form">
+              <label>E-mail para cobrança<input id="billingEmail" type="email" autocomplete="email" required /></label>
+              <button id="subscribeButton" class="primary-button" type="submit">Assinar Pro</button>
+            </form>
+            <div class="row-actions subscription-actions">
+              <button id="syncSubscription" class="ghost-button" type="button">Atualizar situação</button>
+              <button id="cancelSubscription" class="ghost-button hidden" type="button">Cancelar assinatura</button>
+            </div>
+          </section>
+        </section>
+
         <section id="adminView" class="view">
           <div class="summary-grid admin-summary">
-            <article class="metric"><span>Usuários</span><strong id="adminUsers">0</strong><small>cadastrados</small></article>
-            <article class="metric paid"><span>Contas ativas</span><strong id="adminActiveUsers">0</strong><small>usuários</small></article>
+            <article class="metric"><span>Usuários</span><strong id="adminUsers">0</strong><small id="adminActiveText">0 ativos</small></article>
+            <article class="metric paid"><span>Assinantes Pro</span><strong id="adminProUsers">0</strong><small>assinaturas ativas</small></article>
             <article class="metric due"><span>Contas financeiras</span><strong id="adminBills">0</strong><small>lançamentos</small></article>
             <article class="metric late"><span>Valor gerenciado</span><strong id="adminTotal">R$ 0,00</strong><small>total cadastrado</small></article>
           </div>
           <section class="panel"><div class="panel-title"><h2>Usuários</h2><button id="refreshAdmin" class="ghost-button" type="button">Atualizar</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Conta</th><th>Perfil</th><th>Cadastro</th><th>Lançamentos</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody id="adminUserTable"></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Conta</th><th>Perfil</th><th>Plano</th><th>Cadastro</th><th>Lançamentos</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody id="adminUserTable"></tbody></table></div>
           </section>
           <section id="adminUserDetail" class="panel hidden"><div class="panel-title"><h2 id="adminDetailTitle">Detalhes</h2><button id="closeAdminDetail" class="ghost-button" type="button">Fechar</button></div><div id="adminDetailContent"></div></section>
         </section>

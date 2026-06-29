@@ -10,6 +10,7 @@ import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { normalizeIdentifier } from "./auth.js";
+import { MercadoPagoSubscriptions, normalizeSubscription, subscriptionPlan } from "./payments.js";
 import { createStorage } from "./storage.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,8 @@ const cardSchema = z.object({
   dueDay: z.coerce.number().int().min(1).max(31),
   profile: z.enum(profiles),
 });
+const checkoutSchema = z.object({ payerEmail: z.string().trim().email().max(320) });
+const freeLimits = { billsPerMonth: 10, cards: 1 };
 
 export async function createApp(options = {}) {
   const env = options.env || process.env;
@@ -39,6 +42,7 @@ export async function createApp(options = {}) {
   const cpfPepper = resolveSecret(options.cpfPepper || env.CPF_PEPPER, "cpf", env, production);
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
+  const payments = options.payments || new MercadoPagoSubscriptions({ accessToken: env.MERCADOPAGO_ACCESS_TOKEN, siteUrl: env.SITE_URL || "https://ricoxp.com", price: env.PRO_PRICE || 29.9 });
   const adminEmail = String(env.ADMIN_EMAIL || "apktemoficial@gmail.com").trim().toLowerCase();
   const app = express();
   app.set("trust proxy", 1);
@@ -69,6 +73,10 @@ export async function createApp(options = {}) {
     }
   };
   const adminOnly = (req, res, next) => req.user.role === "admin" ? next() : res.status(403).json({ error: "Acesso restrito ao administrador." });
+  const getAccess = async (user) => {
+    const subscription = await storage.getSubscription(user.id);
+    return { subscription, plan: subscriptionPlan(subscription, user.role) };
+  };
 
   app.post("/api/register", authLimiter, asyncRoute(async (req, res) => {
     const input = registerSchema.parse(req.body);
@@ -106,7 +114,16 @@ export async function createApp(options = {}) {
   app.get("/api/session", authenticate, (req, res) => res.json({ user: req.user }));
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await storage.listData(req.user.id))));
 
-  app.post("/api/bills", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createBill(req.user.id, billSchema.parse(req.body)))));
+  app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
+    const bill = billSchema.parse(req.body);
+    const access = await getAccess(req.user);
+    if (access.plan === "free") {
+      const data = await storage.listData(req.user.id);
+      const monthCount = data.bills.filter((item) => item.dueDate.slice(0, 7) === bill.dueDate.slice(0, 7)).length;
+      if (monthCount >= freeLimits.billsPerMonth) return res.status(402).json({ error: `O plano gratis permite ${freeLimits.billsPerMonth} contas por mes. Assine o Pro para continuar.` });
+    }
+    return res.status(201).json(await storage.createBill(req.user.id, bill));
+  }));
   app.put("/api/bills/:id", authenticate, asyncRoute(async (req, res) => {
     const bill = await storage.updateBill(req.user.id, req.params.id, billSchema.parse(req.body));
     return bill ? res.json(bill) : res.status(404).json({ error: "Conta não encontrada." });
@@ -115,10 +132,56 @@ export async function createApp(options = {}) {
     const deleted = await storage.deleteBill(req.user.id, req.params.id);
     return deleted ? res.status(204).end() : res.status(404).json({ error: "Conta não encontrada." });
   }));
-  app.post("/api/cards", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createCard(req.user.id, cardSchema.parse(req.body)))));
+  app.post("/api/cards", authenticate, asyncRoute(async (req, res) => {
+    const card = cardSchema.parse(req.body);
+    const access = await getAccess(req.user);
+    if (access.plan === "free") {
+      const data = await storage.listData(req.user.id);
+      if (data.cards.length >= freeLimits.cards) return res.status(402).json({ error: `O plano gratis permite ${freeLimits.cards} cartao. Assine o Pro para continuar.` });
+    }
+    return res.status(201).json(await storage.createCard(req.user.id, card));
+  }));
   app.delete("/api/cards/:id", authenticate, asyncRoute(async (req, res) => {
     const deleted = await storage.deleteCard(req.user.id, req.params.id);
     return deleted ? res.status(204).end() : res.status(404).json({ error: "Cartão não encontrado." });
+  }));
+
+  app.get("/api/subscription", authenticate, asyncRoute(async (req, res) => {
+    const { subscription, plan } = await getAccess(req.user);
+    return res.json(subscriptionResponse(subscription, plan, payments));
+  }));
+  app.post("/api/subscription/checkout", authenticate, authLimiter, asyncRoute(async (req, res) => {
+    const { payerEmail } = checkoutSchema.parse(req.body);
+    const current = await storage.getSubscription(req.user.id);
+    if (current?.status === "authorized") return res.status(409).json({ error: "Sua assinatura Pro ja esta ativa." });
+    const remote = await payments.create(req.user.id, payerEmail.toLowerCase());
+    const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
+    return res.status(201).json({ checkoutUrl: remote.init_point, subscription: subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments) });
+  }));
+  app.post("/api/subscription/sync", authenticate, asyncRoute(async (req, res) => {
+    const current = await storage.getSubscription(req.user.id);
+    if (!current?.providerId) return res.json(subscriptionResponse(null, subscriptionPlan(null, req.user.role), payments));
+    const remote = await payments.get(current.providerId);
+    if (remote.external_reference !== req.user.id) return res.status(403).json({ error: "Assinatura invalida." });
+    const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
+    return res.json(subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments));
+  }));
+  app.post("/api/subscription/cancel", authenticate, asyncRoute(async (req, res) => {
+    const current = await storage.getSubscription(req.user.id);
+    if (!current?.providerId) return res.status(404).json({ error: "Assinatura nao encontrada." });
+    const remote = await payments.cancel(current.providerId);
+    const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
+    return res.json(subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments));
+  }));
+  app.post("/api/webhooks/mercadopago", asyncRoute(async (req, res) => {
+    const providerId = String(req.query["data.id"] || req.body?.data?.id || "");
+    if (!providerId) return res.status(200).json({ received: true });
+    const current = await storage.getSubscriptionByProviderId(providerId);
+    if (!current) return res.status(200).json({ received: true });
+    const remote = await payments.get(providerId);
+    const user = remote.external_reference === current.userId ? await storage.getUser(current.userId) : null;
+    if (user) await storage.upsertSubscription(normalizeSubscription(remote));
+    return res.status(200).json({ received: true });
   }));
 
   app.get("/api/admin/overview", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await storage.adminOverview())));
@@ -150,9 +213,13 @@ export async function createApp(options = {}) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: "Revise os dados informados." });
     if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Conta já cadastrada." });
     console.error(error);
-    return res.status(500).json({ error: "Não foi possível concluir a operação." });
+    return res.status(error.status || 500).json({ error: error.status ? error.message : "Não foi possível concluir a operação." });
   });
   return app;
+}
+
+function subscriptionResponse(subscription, plan, payments) {
+  return { plan, status: subscription?.status || null, payerEmail: subscription?.payerEmail || null, nextPaymentDate: subscription?.nextPaymentDate || null, price: payments.price, configured: payments.configured, limits: plan === "pro" ? null : freeLimits };
 }
 
 function sanitizeUser(user) {
