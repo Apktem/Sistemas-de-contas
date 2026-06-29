@@ -1,1 +1,292 @@
-﻿const STORAGE_KEY="gestao-financeira-v1";const money=new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"});const uid=()=>crypto.randomUUID();const initialState={bills:[{id:uid(),name:"Aluguel",amount:600,dueDate:"2026-06-25",profile:"Empresa",category:"Moradia",status:"paid"},{id:uid(),name:"Agua / Energia",amount:260,dueDate:"2026-06-25",profile:"Empresa",category:"Servicos",status:"paid"},{id:uid(),name:"Telefone Fixo",amount:335,dueDate:"2026-06-28",profile:"Empresa",category:"Servicos",status:"paid"},{id:uid(),name:"Sistema ApkteM",amount:2275.89,dueDate:"2026-06-20",profile:"Empresa",category:"Servicos",status:"paid"},{id:uid(),name:"Google Maps",amount:709.79,dueDate:"2026-06-01",profile:"Empresa",category:"Servicos",status:"paid"},{id:uid(),name:"Plano de Saude",amount:150,dueDate:"2026-06-25",profile:"Empresa",category:"Saude",status:"pending"},{id:uid(),name:"Valem Marketing Digital",amount:2000,dueDate:"2026-06-25",profile:"Empresa",category:"Servicos",status:"paid"},{id:uid(),name:"Aluguel",amount:1300,dueDate:"2026-06-10",profile:"Casa",category:"Moradia",status:"paid"},{id:uid(),name:"Internet",amount:100,dueDate:"2026-06-25",profile:"Casa",category:"Servicos",status:"pending"},{id:uid(),name:"Parcela Carro",amount:2100,dueDate:"2026-06-17",profile:"Casa",category:"Outros",status:"paid"},{id:uid(),name:"Seguro Carro",amount:316,dueDate:"2026-06-11",profile:"Casa",category:"Outros",status:"paid"},{id:uid(),name:"Pensao",amount:450,dueDate:"2026-06-20",profile:"Casa",category:"Outros",status:"pending"},{id:uid(),name:"Nubank Lais",amount:340,dueDate:"2026-06-05",profile:"Casa",category:"Cartao",status:"paid"}],cards:[{id:uid(),name:"Santander Empresa",limit:8000,closeDay:15,dueDay:20,profile:"Empresa"},{id:uid(),name:"Nubank Clezio",limit:5000,closeDay:25,dueDay:5,profile:"Casa"},{id:uid(),name:"Santander Clezio",limit:6500,closeDay:28,dueDay:10,profile:"Casa"}]};let state=loadState();const els={loginScreen:document.querySelector("#loginScreen"),appScreen:document.querySelector("#appScreen"),loginForm:document.querySelector("#loginForm"),logoutButton:document.querySelector("#logoutButton"),todayLabel:document.querySelector("#todayLabel"),pageTitle:document.querySelector("#pageTitle"),monthFilter:document.querySelector("#monthFilter"),profileFilter:document.querySelector("#profileFilter"),navItems:document.querySelectorAll(".nav-item"),views:document.querySelectorAll(".view"),billForm:document.querySelector("#billForm"),cardForm:document.querySelector("#cardForm"),cancelEditButton:document.querySelector("#cancelEditButton"),exportButton:document.querySelector("#exportButton")};function loadState(){const saved=localStorage.getItem(STORAGE_KEY);return saved?JSON.parse(saved):initialState}function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}function currentMonth(){return new Date().toISOString().slice(0,7)}function getFilteredBills(){const month=els.monthFilter.value,profile=els.profileFilter.value;return state.bills.filter(b=>b.dueDate.startsWith(month)).filter(b=>profile==="all"||b.profile===profile).sort((a,b)=>a.dueDate.localeCompare(b.dueDate))}function billSituation(bill){const today=new Date();today.setHours(0,0,0,0);const due=new Date(`${bill.dueDate}T00:00:00`);if(bill.status==="paid")return"paid";return due<today?"overdue":"pending"}function render(){renderMetrics();renderChart();renderLists();renderTable();renderCards()}function renderMetrics(){const bills=getFilteredBills(),paid=bills.filter(b=>billSituation(b)==="paid"),pending=bills.filter(b=>billSituation(b)==="pending"),overdue=bills.filter(b=>billSituation(b)==="overdue");setMetric(bills,"#metricTotal","#metricTotalCount");setMetric(paid,"#metricPaid","#metricPaidCount");setMetric(pending,"#metricPending","#metricPendingCount");setMetric(overdue,"#metricOverdue","#metricOverdueCount")}function setMetric(items,valueSelector,countSelector){document.querySelector(valueSelector).textContent=money.format(items.reduce((s,b)=>s+Number(b.amount),0));document.querySelector(countSelector).textContent=`${items.length} ${items.length===1?"conta":"contas"}`}function renderChart(){const canvas=document.querySelector("#statusChart"),ctx=canvas.getContext("2d"),bills=getFilteredBills(),paidValue=bills.filter(b=>billSituation(b)==="paid").reduce((s,b)=>s+Number(b.amount),0),pendingValue=bills.filter(b=>billSituation(b)==="pending").reduce((s,b)=>s+Number(b.amount),0),overdueValue=bills.filter(b=>billSituation(b)==="overdue").reduce((s,b)=>s+Number(b.amount),0),total=paidValue+pendingValue+overdueValue,entries=[{value:paidValue,color:"#209869"},{value:pendingValue,color:"#d8911c"},{value:overdueValue,color:"#cf3f3f"}].filter(e=>e.value>0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#eef3f2";ctx.beginPath();ctx.arc(140,140,105,0,Math.PI*2);ctx.fill();let start=-Math.PI/2;entries.forEach(e=>{const angle=total?(e.value/total)*Math.PI*2:0;ctx.beginPath();ctx.moveTo(140,140);ctx.arc(140,140,105,start,start+angle);ctx.closePath();ctx.fillStyle=e.color;ctx.fill();start+=angle});ctx.beginPath();ctx.arc(140,140,62,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.fillStyle="#17211f";ctx.font="700 22px Arial";ctx.textAlign="center";ctx.fillText(total?`${Math.round(paidValue/total*100)}%`:"0%",140,135);ctx.font="12px Arial";ctx.fillStyle="#64716e";ctx.fillText("pago",140,154);document.querySelector("#paidPercent").textContent=`${total?Math.round(paidValue/total*100):0}% pago`}function renderLists(){const today=new Date();today.setHours(0,0,0,0);const upcoming=getFilteredBills().filter(b=>billSituation(b)!=="paid").map(b=>({...b,days:daysUntil(b.dueDate,today)})).sort((a,b)=>a.days-b.days);drawRows("#upcomingList",upcoming.filter(b=>b.days<=7).slice(0,6),"Nenhuma conta vencendo nos proximos 7 dias.");drawRows("#reminderList",upcoming,"Nenhum lembrete pendente para este filtro.")}function drawRows(selector,bills,emptyText){const container=document.querySelector(selector);if(!bills.length){container.innerHTML=`<p class="muted">${emptyText}</p>`;return}container.innerHTML=bills.map(b=>{const situation=billSituation(b),text=situation==="overdue"?`Venceu ha ${Math.abs(b.days)} dia(s)`:`Vence em ${b.days} dia(s)`;return`<div class="list-row"><div><strong>${b.name}</strong><small>${b.profile} - ${formatDate(b.dueDate)} - ${money.format(Number(b.amount))}</small></div><span class="badge ${situation}">${text}</span></div>`}).join("")}function renderTable(){const tbody=document.querySelector("#billTable"),bills=getFilteredBills();if(!bills.length){tbody.innerHTML=`<tr><td colspan="6">Nenhuma conta cadastrada para este filtro.</td></tr>`;return}tbody.innerHTML=bills.map(b=>{const situation=billSituation(b);return`<tr><td>${b.name}</td><td>${b.profile}</td><td>${money.format(Number(b.amount))}</td><td>${formatDate(b.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" type="button" data-action="toggle" data-id="${b.id}">${b.status==="paid"?"Reabrir":"Pagar"}</button><button class="small-button" type="button" data-action="edit" data-id="${b.id}">Editar</button><button class="small-button" type="button" data-action="delete" data-id="${b.id}">Excluir</button></div></td></tr>`}).join("")}function renderCards(){const profile=els.profileFilter.value,cards=state.cards.filter(c=>profile==="all"||c.profile===profile),bills=getFilteredBills(),container=document.querySelector("#cardList");if(!cards.length){container.innerHTML=`<section class="panel"><p class="muted">Nenhum cartao cadastrado.</p></section>`;return}container.innerHTML=cards.map(c=>{const used=bills.filter(b=>b.category==="Cartao"&&b.name.toLowerCase().includes(c.name.split(" ")[0].toLowerCase())).reduce((s,b)=>s+Number(b.amount),0),percent=Math.min(100,Math.round(used/Number(c.limit||1)*100));return`<article class="card-item"><div><strong>${c.name}</strong><p class="muted">${c.profile} - vence dia ${c.dueDay} - fecha dia ${c.closeDay}</p></div><div class="progress"><span style="width:${percent}%"></span></div><small>${money.format(used)} usado de ${money.format(Number(c.limit))}</small><button class="small-button" type="button" data-card-delete="${c.id}">Excluir cartao</button></article>`}).join("")}function daysUntil(dateText,today){return Math.ceil((new Date(`${dateText}T00:00:00`)-today)/86400000)}function formatDate(dateText){return new Date(`${dateText}T00:00:00`).toLocaleDateString("pt-BR")}function statusLabel(s){return{paid:"Pago",pending:"A vencer",overdue:"Vencida"}[s]}function resetBillForm(){els.billForm.reset();document.querySelector("#billId").value="";document.querySelector("#billDueDate").value=`${els.monthFilter.value}-10`;els.cancelEditButton.classList.add("hidden")}function exportCsv(){const rows=[["Nome","Perfil","Categoria","Valor","Vencimento","Status"]];getFilteredBills().forEach(b=>rows.push([b.name,b.profile,b.category,b.amount,b.dueDate,statusLabel(billSituation(b))]));const csv=rows.map(row=>row.map(cell=>`"${String(cell).replaceAll('"','""')}"`).join(";")).join("\n"),blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=`contas-${els.monthFilter.value}.csv`;link.click();URL.revokeObjectURL(url)}els.loginForm.addEventListener("submit",e=>{e.preventDefault();els.loginScreen.classList.add("hidden");els.appScreen.classList.remove("hidden");localStorage.setItem("gestao-financeira-auth","true");render()});els.logoutButton.addEventListener("click",()=>{localStorage.removeItem("gestao-financeira-auth");els.loginScreen.classList.remove("hidden");els.appScreen.classList.add("hidden")});els.navItems.forEach(item=>item.addEventListener("click",()=>{els.navItems.forEach(nav=>nav.classList.remove("active"));item.classList.add("active");els.views.forEach(view=>view.classList.remove("active-view"));document.querySelector(`#${item.dataset.view}View`).classList.add("active-view");els.pageTitle.textContent=item.textContent;render()}));els.monthFilter.addEventListener("change",()=>{resetBillForm();render()});els.profileFilter.addEventListener("change",render);els.exportButton.addEventListener("click",exportCsv);els.cancelEditButton.addEventListener("click",resetBillForm);els.billForm.addEventListener("submit",e=>{e.preventDefault();const id=document.querySelector("#billId").value||uid(),bill={id,name:document.querySelector("#billName").value.trim(),amount:Number(document.querySelector("#billAmount").value),dueDate:document.querySelector("#billDueDate").value,profile:document.querySelector("#billProfile").value,category:document.querySelector("#billCategory").value,status:document.querySelector("#billStatus").value};state.bills=state.bills.some(item=>item.id===id)?state.bills.map(item=>item.id===id?bill:item):[...state.bills,bill];saveState();resetBillForm();render()});document.querySelector("#billTable").addEventListener("click",e=>{const button=e.target.closest("button");if(!button)return;const bill=state.bills.find(item=>item.id===button.dataset.id);if(!bill)return;if(button.dataset.action==="toggle")bill.status=bill.status==="paid"?"pending":"paid";if(button.dataset.action==="delete")state.bills=state.bills.filter(item=>item.id!==bill.id);if(button.dataset.action==="edit"){document.querySelector("#billId").value=bill.id;document.querySelector("#billName").value=bill.name;document.querySelector("#billAmount").value=bill.amount;document.querySelector("#billDueDate").value=bill.dueDate;document.querySelector("#billProfile").value=bill.profile;document.querySelector("#billCategory").value=bill.category;document.querySelector("#billStatus").value=bill.status;els.cancelEditButton.classList.remove("hidden")}saveState();render()});els.cardForm.addEventListener("submit",e=>{e.preventDefault();state.cards.push({id:uid(),name:document.querySelector("#cardName").value.trim(),limit:Number(document.querySelector("#cardLimit").value),closeDay:Number(document.querySelector("#cardCloseDay").value),dueDay:Number(document.querySelector("#cardDueDay").value),profile:document.querySelector("#cardProfile").value});saveState();els.cardForm.reset();render()});document.querySelector("#cardList").addEventListener("click",e=>{const button=e.target.closest("[data-card-delete]");if(!button)return;state.cards=state.cards.filter(card=>card.id!==button.dataset.cardDelete);saveState();render()});els.monthFilter.value=currentMonth();els.todayLabel.textContent=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});resetBillForm();if(localStorage.getItem("gestao-financeira-auth")==="true"){els.loginScreen.classList.add("hidden");els.appScreen.classList.remove("hidden")}if("serviceWorker"in navigator){navigator.serviceWorker.register("service-worker.js").catch(()=>{})}render();
+const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const state = { user: null, bills: [], cards: [], adminUsers: [] };
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => document.querySelectorAll(selector);
+const els = {
+  loginScreen: $("#loginScreen"), appScreen: $("#appScreen"), loginForm: $("#loginForm"), registerForm: $("#registerForm"),
+  authMessage: $("#authMessage"), appMessage: $("#appMessage"), monthFilter: $("#monthFilter"), profileFilter: $("#profileFilter"),
+  billForm: $("#billForm"), cardForm: $("#cardForm"), cancelEditButton: $("#cancelEditButton"), financeFilters: $("#financeFilters"),
+};
+
+async function api(url, options = {}) {
+  const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options.headers } });
+  if (response.status === 204) return null;
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 && !url.includes("/login") && !url.includes("/register")) showAuth();
+    throw new Error(body.error || "Não foi possível concluir a operação.");
+  }
+  return body;
+}
+
+function setMessage(target, text = "", success = false) {
+  target.textContent = text;
+  target.classList.toggle("success", success);
+}
+
+function showAuth() {
+  state.user = null;
+  els.loginScreen.classList.remove("hidden");
+  els.appScreen.classList.add("hidden");
+}
+
+async function enterApp(user) {
+  state.user = user;
+  $("#userBadge").textContent = `${user.identifierLabel}${user.role === "admin" ? " · Administrador" : ""}`;
+  $("#adminNav").classList.toggle("hidden", user.role !== "admin");
+  els.loginScreen.classList.add("hidden");
+  els.appScreen.classList.remove("hidden");
+  await loadData();
+  switchView("dashboard", "Painel");
+}
+
+async function loadData() {
+  const data = await api("/api/data");
+  state.bills = data.bills;
+  state.cards = data.cards;
+  render();
+}
+
+function getFilteredBills() {
+  const month = els.monthFilter.value;
+  const profile = els.profileFilter.value;
+  return state.bills.filter((bill) => bill.dueDate.startsWith(month)).filter((bill) => profile === "all" || bill.profile === profile).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
+function billSituation(bill) {
+  if (bill.status === "paid") return "paid";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(`${bill.dueDate}T00:00:00`) < today ? "overdue" : "pending";
+}
+
+function render() {
+  renderMetrics();
+  renderChart();
+  renderLists();
+  renderTable();
+  renderCards();
+}
+
+function renderMetrics() {
+  const bills = getFilteredBills();
+  const groups = {
+    total: bills,
+    paid: bills.filter((bill) => billSituation(bill) === "paid"),
+    pending: bills.filter((bill) => billSituation(bill) === "pending"),
+    overdue: bills.filter((bill) => billSituation(bill) === "overdue"),
+  };
+  setMetric(groups.total, "#metricTotal", "#metricTotalCount");
+  setMetric(groups.paid, "#metricPaid", "#metricPaidCount");
+  setMetric(groups.pending, "#metricPending", "#metricPendingCount");
+  setMetric(groups.overdue, "#metricOverdue", "#metricOverdueCount");
+}
+
+function setMetric(items, valueSelector, countSelector) {
+  $(valueSelector).textContent = money.format(items.reduce((sum, bill) => sum + Number(bill.amount), 0));
+  $(countSelector).textContent = `${items.length} ${items.length === 1 ? "conta" : "contas"}`;
+}
+
+function renderChart() {
+  const canvas = $("#statusChart");
+  const ctx = canvas.getContext("2d");
+  const bills = getFilteredBills();
+  const values = [
+    { value: sumByStatus(bills, "paid"), color: "#209869" },
+    { value: sumByStatus(bills, "pending"), color: "#d8911c" },
+    { value: sumByStatus(bills, "overdue"), color: "#cf3f3f" },
+  ];
+  const total = values.reduce((sum, entry) => sum + entry.value, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#eef3f2";
+  ctx.beginPath(); ctx.arc(140, 140, 105, 0, Math.PI * 2); ctx.fill();
+  let start = -Math.PI / 2;
+  values.filter((entry) => entry.value > 0).forEach((entry) => {
+    const angle = total ? (entry.value / total) * Math.PI * 2 : 0;
+    ctx.beginPath(); ctx.moveTo(140, 140); ctx.arc(140, 140, 105, start, start + angle); ctx.closePath(); ctx.fillStyle = entry.color; ctx.fill(); start += angle;
+  });
+  ctx.beginPath(); ctx.arc(140, 140, 62, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+  const paidValue = values[0].value;
+  const percent = total ? Math.round((paidValue / total) * 100) : 0;
+  ctx.fillStyle = "#17211f"; ctx.font = "700 22px Arial"; ctx.textAlign = "center"; ctx.fillText(`${percent}%`, 140, 135);
+  ctx.font = "12px Arial"; ctx.fillStyle = "#64716e"; ctx.fillText("pago", 140, 154);
+  $("#paidPercent").textContent = `${percent}% pago`;
+}
+
+function sumByStatus(bills, status) {
+  return bills.filter((bill) => billSituation(bill) === status).reduce((sum, bill) => sum + Number(bill.amount), 0);
+}
+
+function renderLists() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = getFilteredBills().filter((bill) => billSituation(bill) !== "paid").map((bill) => ({ ...bill, days: Math.ceil((new Date(`${bill.dueDate}T00:00:00`) - today) / 86400000) })).sort((a, b) => a.days - b.days);
+  drawRows("#upcomingList", upcoming.filter((bill) => bill.days <= 7).slice(0, 6), "Nenhuma conta vencendo nos próximos 7 dias.");
+  drawRows("#reminderList", upcoming, "Nenhum lembrete pendente para este filtro.");
+}
+
+function drawRows(selector, bills, emptyText) {
+  const container = $(selector);
+  if (!bills.length) { container.innerHTML = `<p class="muted">${emptyText}</p>`; return; }
+  container.innerHTML = bills.map((bill) => {
+    const situation = billSituation(bill);
+    const text = situation === "overdue" ? `Venceu há ${Math.abs(bill.days)} dia(s)` : `Vence em ${bill.days} dia(s)`;
+    return `<div class="list-row"><div><strong>${escapeHtml(bill.name)}</strong><small>${bill.profile} · ${formatDate(bill.dueDate)} · ${money.format(Number(bill.amount))}</small></div><span class="badge ${situation}">${text}</span></div>`;
+  }).join("");
+}
+
+function renderTable() {
+  const bills = getFilteredBills();
+  $("#billTable").innerHTML = bills.length ? bills.map((bill) => {
+    const situation = billSituation(bill);
+    return `<tr><td>${escapeHtml(bill.name)}</td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button><button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
+  }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
+}
+
+function renderCards() {
+  const profile = els.profileFilter.value;
+  const cards = state.cards.filter((card) => profile === "all" || card.profile === profile);
+  $("#cardList").innerHTML = cards.length ? cards.map((card) => {
+    const used = getFilteredBills().filter((bill) => bill.category === "Cartao" && bill.name.toLowerCase().includes(card.name.split(" ")[0].toLowerCase())).reduce((sum, bill) => sum + Number(bill.amount), 0);
+    const percent = Math.min(100, Math.round((used / Number(card.limit || 1)) * 100));
+    return `<article class="card-item"><div><strong>${escapeHtml(card.name)}</strong><p class="muted">${card.profile} · vence dia ${card.dueDay} · fecha dia ${card.closeDay}</p></div><div class="progress"><span style="width:${percent}%"></span></div><small>${money.format(used)} usado de ${money.format(Number(card.limit))}</small><button class="small-button" data-card-delete="${card.id}" type="button">Excluir cartão</button></article>`;
+  }).join("") : '<section class="panel"><p class="muted">Nenhum cartão cadastrado.</p></section>';
+}
+
+function resetBillForm() {
+  els.billForm.reset();
+  $("#billId").value = "";
+  $("#billDueDate").value = `${els.monthFilter.value}-10`;
+  els.cancelEditButton.classList.add("hidden");
+}
+
+function switchView(view, title) {
+  $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  $$(".view").forEach((item) => item.classList.remove("active-view"));
+  $(`#${view}View`).classList.add("active-view");
+  $("#pageTitle").textContent = title;
+  els.financeFilters.classList.toggle("hidden", view === "admin");
+  if (view === "admin") loadAdmin();
+}
+
+async function loadAdmin() {
+  if (state.user?.role !== "admin") return;
+  try {
+    const [overview, usersData] = await Promise.all([api("/api/admin/overview"), api("/api/admin/users")]);
+    state.adminUsers = usersData.users;
+    $("#adminUsers").textContent = overview.users;
+    $("#adminActiveUsers").textContent = overview.activeUsers;
+    $("#adminBills").textContent = overview.bills;
+    $("#adminTotal").textContent = money.format(Number(overview.totalAmount));
+    renderAdminUsers();
+  } catch (error) { setMessage(els.appMessage, error.message); }
+}
+
+function renderAdminUsers() {
+  $("#adminUserTable").innerHTML = state.adminUsers.map((user) => `<tr><td>${escapeHtml(user.identifierLabel)}</td><td>${user.role === "admin" ? "Administrador" : "Usuário"}</td><td>${new Date(user.createdAt).toLocaleDateString("pt-BR")}</td><td>${user.billCount}</td><td>${money.format(Number(user.totalAmount))}</td><td><span class="badge ${user.active ? "active" : "inactive"}">${user.active ? "Ativo" : "Inativo"}</span></td><td><div class="row-actions"><button class="small-button" data-admin-view="${user.id}" type="button">Ver financeiro</button>${user.id === state.user.id ? "" : `<button class="small-button" data-admin-status="${user.id}" data-active="${!user.active}" type="button">${user.active ? "Desativar" : "Ativar"}</button>`}</div></td></tr>`).join("");
+}
+
+async function showAdminUser(id) {
+  const data = await api(`/api/admin/users/${id}/data`);
+  $("#adminDetailTitle").textContent = `Financeiro de ${data.user.identifierLabel}`;
+  const billRows = data.bills.length ? data.bills.map((bill) => `<tr><td>${escapeHtml(bill.name)}</td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td>${statusLabel(billSituation(bill))}</td></tr>`).join("") : '<tr><td colspan="5">Nenhum lançamento.</td></tr>';
+  $("#adminDetailContent").innerHTML = `<div class="admin-detail-grid"><div><h3>Contas</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${billRows}</tbody></table></div></div><div><h3>Cartões</h3><p>${data.cards.length} cartão(ões) cadastrado(s).</p></div></div>`;
+  $("#adminUserDetail").classList.remove("hidden");
+}
+
+function exportCsv() {
+  const rows = [["Nome", "Perfil", "Categoria", "Valor", "Vencimento", "Status"]];
+  getFilteredBills().forEach((bill) => rows.push([bill.name, bill.profile, bill.category, bill.amount, bill.dueDate, statusLabel(billSituation(bill))]));
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(";")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a"); link.href = url; link.download = `contas-${els.monthFilter.value}.csv`; link.click(); URL.revokeObjectURL(url);
+}
+
+function formatDate(value) { return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR"); }
+function statusLabel(status) { return { paid: "Pago", pending: "A vencer", overdue: "Vencida" }[status]; }
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
+
+$$('[data-auth-view]').forEach((button) => button.addEventListener("click", () => {
+  $$('[data-auth-view]').forEach((item) => item.classList.toggle("active", item === button));
+  els.loginForm.classList.toggle("hidden", button.dataset.authView !== "login");
+  els.registerForm.classList.toggle("hidden", button.dataset.authView !== "register");
+  setMessage(els.authMessage);
+}));
+
+els.loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage(els.authMessage);
+  try {
+    const result = await api("/api/login", { method: "POST", body: JSON.stringify({ identifier: $("#loginIdentifier").value, password: $("#loginPassword").value }) });
+    await enterApp(result.user);
+  } catch (error) { setMessage(els.authMessage, error.message); }
+});
+
+els.registerForm.addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage(els.authMessage);
+  if ($("#registerPassword").value !== $("#registerPasswordConfirm").value) { setMessage(els.authMessage, "As senhas não coincidem."); return; }
+  try {
+    const result = await api("/api/register", { method: "POST", body: JSON.stringify({ identifier: $("#registerIdentifier").value, password: $("#registerPassword").value }) });
+    await enterApp(result.user);
+  } catch (error) { setMessage(els.authMessage, error.message); }
+});
+
+$("#logoutButton").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }).catch(() => {}); showAuth(); });
+$$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
+els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
+els.profileFilter.addEventListener("change", render);
+$("#exportButton").addEventListener("click", exportCsv);
+els.cancelEditButton.addEventListener("click", resetBillForm);
+
+els.billForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const id = $("#billId").value;
+  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value };
+  try {
+    await api(id ? `/api/bills/${id}` : "/api/bills", { method: id ? "PUT" : "POST", body: JSON.stringify(bill) });
+    await loadData(); resetBillForm(); setMessage(els.appMessage, "Conta salva.", true);
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+$("#billTable").addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const bill = state.bills.find((item) => item.id === button.dataset.id);
+  if (!bill) return;
+  if (button.dataset.action === "edit") {
+    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; els.cancelEditButton.classList.remove("hidden"); return;
+  }
+  try {
+    if (button.dataset.action === "delete") await api(`/api/bills/${bill.id}`, { method: "DELETE" });
+    if (button.dataset.action === "toggle") await api(`/api/bills/${bill.id}`, { method: "PUT", body: JSON.stringify({ ...bill, status: bill.status === "paid" ? "pending" : "paid" }) });
+    await loadData();
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+els.cardForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const card = { name: $("#cardName").value.trim(), limit: Number($("#cardLimit").value), closeDay: Number($("#cardCloseDay").value), dueDay: Number($("#cardDueDay").value), profile: $("#cardProfile").value };
+  try { await api("/api/cards", { method: "POST", body: JSON.stringify(card) }); await loadData(); els.cardForm.reset(); setMessage(els.appMessage, "Cartão salvo.", true); } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+$("#cardList").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-card-delete]");
+  if (!button) return;
+  try { await api(`/api/cards/${button.dataset.cardDelete}`, { method: "DELETE" }); await loadData(); } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+$("#refreshAdmin").addEventListener("click", loadAdmin);
+$("#closeAdminDetail").addEventListener("click", () => $("#adminUserDetail").classList.add("hidden"));
+$("#adminUserTable").addEventListener("click", async (event) => {
+  const viewButton = event.target.closest("[data-admin-view]");
+  const statusButton = event.target.closest("[data-admin-status]");
+  try {
+    if (viewButton) await showAdminUser(viewButton.dataset.adminView);
+    if (statusButton) { await api(`/api/admin/users/${statusButton.dataset.adminStatus}/status`, { method: "PATCH", body: JSON.stringify({ active: statusButton.dataset.active === "true" }) }); await loadAdmin(); }
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+els.monthFilter.value = new Date().toISOString().slice(0, 7);
+$("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+resetBillForm();
+api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});
