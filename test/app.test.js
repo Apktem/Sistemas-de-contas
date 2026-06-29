@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import test from "node:test";
 import { isValidCpf } from "../auth.js";
-import { createApp } from "../server.js";
+import { createApp } from "../backend.js";
 import { MemoryStorage } from "../storage.js";
 
 test("valida CPF", () => {
