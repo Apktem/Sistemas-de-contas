@@ -20,11 +20,11 @@ pnpm build
 pnpm start
 ```
 
-Sem variáveis de banco, o servidor usa armazenamento temporário apenas em desenvolvimento. Em produção, configure as variáveis documentadas em `.env.example`.
+Sem variáveis de banco, o servidor usa armazenamento temporário apenas em desenvolvimento. Em produção, configure `SUPABASE_URL` e `SUPABASE_API_KEY` conforme `.env.example` e execute `supabase-schema.sql` no SQL Editor do Supabase.
 
 ## Hostinger
 
-Crie um banco MySQL e cadastre as variáveis de `.env.example` no painel. Use:
+Conecte um projeto Supabase pelo assistente da Hostinger e cadastre as demais variáveis de `.env.example`. Use:
 
 - Build: `pnpm run build`
 - Start: `pnpm start`
