@@ -28,7 +28,7 @@ Conecte um projeto Supabase pelo assistente da Hostinger e cadastre as demais va
 
 - Build: `pnpm run build`
 - Start: `pnpm start`
-- Entry file: `server.js`
+- Entry file: `bootstrap.cjs`
 - Node.js: `22.x`
 
 O e-mail definido em `ADMIN_EMAIL` recebe perfil administrativo ao criar a conta.

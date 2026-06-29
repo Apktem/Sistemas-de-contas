@@ -2,12 +2,13 @@
   "name": "gestao-financeira-app",
   "version": "1.0.0",
   "private": true,
+  "main": "bootstrap.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "start": "node server.js",
-    "preview": "node server.js",
+    "start": "node bootstrap.cjs",
+    "preview": "node bootstrap.cjs",
     "test": "node --test"
   },
   "dependencies": {
