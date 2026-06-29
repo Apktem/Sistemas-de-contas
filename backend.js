@@ -39,6 +39,7 @@ export async function createApp(options = {}) {
   const cpfPepper = resolveSecret(options.cpfPepper || env.CPF_PEPPER, "cpf", env, production);
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
+  const adminEmail = String(env.ADMIN_EMAIL || "apktemoficial@gmail.com").trim().toLowerCase();
   const app = express();
   app.set("trust proxy", 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: "same-origin" } }));
@@ -50,11 +51,17 @@ export async function createApp(options = {}) {
     const token = jwt.sign({ sub: user.id, role: user.role }, sessionSecret, { expiresIn: "7d", issuer: "gestao-financeira" });
     res.cookie("finance_session", token, { httpOnly: true, secure: production, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
   };
+  const ensureAdminRole = async (user) => {
+    const isConfiguredAdmin = user?.identifierType === "email" && user.identifierLabel?.toLowerCase() === adminEmail;
+    if (!isConfiguredAdmin || user.role === "admin") return user;
+    return await storage.setUserRole(user.id, "admin") || { ...user, role: "admin" };
+  };
   const authenticate = async (req, res, next) => {
     try {
       const payload = jwt.verify(req.cookies.finance_session || "", sessionSecret, { issuer: "gestao-financeira" });
-      const user = await storage.getUser(payload.sub);
+      let user = await storage.getUser(payload.sub);
       if (!user?.active) return res.status(401).json({ error: "Sessão inválida." });
+      user = await ensureAdminRole(user);
       req.user = user;
       return next();
     } catch {
@@ -69,7 +76,6 @@ export async function createApp(options = {}) {
     const existing = await storage.findUser(identity.type, identity.lookup);
     if (existing) return res.status(409).json({ error: "Já existe uma conta com esse e-mail ou CPF." });
     const passwordHash = await bcrypt.hash(input.password, 12);
-    const adminEmail = String(env.ADMIN_EMAIL || "").trim().toLowerCase();
     const user = await storage.createUser({
       email: identity.email,
       cpfHash: identity.cpfHash,
@@ -86,8 +92,9 @@ export async function createApp(options = {}) {
   app.post("/api/login", authLimiter, asyncRoute(async (req, res) => {
     const input = registerSchema.parse(req.body);
     const identity = normalizeIdentifier(input.identifier, cpfPepper);
-    const user = await storage.findUser(identity.type, identity.lookup);
+    let user = await storage.findUser(identity.type, identity.lookup);
     if (!user || !user.active || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: "E-mail/CPF ou senha incorretos." });
+    user = await ensureAdminRole(user);
     setSession(res, user);
     return res.json({ user: sanitizeUser(user) });
   }));
