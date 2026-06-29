@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
@@ -128,8 +129,16 @@ export async function createApp(options = {}) {
   }));
 
   app.use("/api", (_req, res) => res.status(404).json({ error: "Rota não encontrada." }));
-  app.use(express.static(path.join(root, "dist"), { index: false, maxAge: production ? "1h" : 0 }));
-  app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(root, "dist", "index.html")) : next());
+  const distRoot = path.join(root, "dist");
+  const hasBuild = existsSync(path.join(distRoot, "index.html"));
+  if (hasBuild) {
+    app.use(express.static(distRoot, { index: false, maxAge: production ? "1h" : 0 }));
+  } else {
+    ["app.js", "styles.css", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
+      app.get(`/${file}`, (_req, res) => res.sendFile(path.join(root, file)));
+    });
+  }
+  app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(hasBuild ? distRoot : root, "index.html")) : next());
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: "Revise os dados informados." });
     if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Conta já cadastrada." });
