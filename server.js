@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
@@ -33,8 +34,8 @@ const cardSchema = z.object({
 export async function createApp(options = {}) {
   const env = options.env || process.env;
   const production = env.NODE_ENV === "production";
-  const sessionSecret = options.sessionSecret || env.SESSION_SECRET || "development-session-secret-change-me";
-  const cpfPepper = options.cpfPepper || env.CPF_PEPPER || "development-cpf-pepper-change-me";
+  const sessionSecret = resolveSecret(options.sessionSecret || env.SESSION_SECRET, "session", env, production);
+  const cpfPepper = resolveSecret(options.cpfPepper || env.CPF_PEPPER, "cpf", env, production);
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
   const app = express();
@@ -144,6 +145,13 @@ function sanitizeUser(user) {
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function resolveSecret(value, purpose, env, production) {
+  if (value) return value;
+  if (env.SUPABASE_API_KEY) return createHash("sha256").update(`${purpose}:${env.SUPABASE_API_KEY}`).digest("hex");
+  if (production) throw new Error(`Segredo de ${purpose} não configurado.`);
+  return `development-${purpose}-secret-change-me-now`;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -20,7 +20,7 @@ pnpm build
 pnpm start
 ```
 
-Sem variáveis de banco, o servidor usa armazenamento temporário apenas em desenvolvimento. Em produção, configure `SUPABASE_URL` e `SUPABASE_API_KEY` conforme `.env.example` e execute `supabase-schema.sql` no SQL Editor do Supabase.
+Sem variáveis de banco, o servidor usa armazenamento temporário apenas em desenvolvimento. Em produção, configure `SUPABASE_URL` e `SUPABASE_API_KEY` conforme `.env.example` e execute `supabase-schema.sql` no SQL Editor do Supabase. As chaves internas de sessão e CPF são derivadas da chave secreta do servidor.
 
 ## Hostinger
 
