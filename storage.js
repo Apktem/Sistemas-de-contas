@@ -19,6 +19,7 @@ export class MemoryStorage {
   async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
   async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
   async setUserActive(id, active) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.active = active; return publicUser(user); }
+  async setUserRole(id, role) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.role = role; return publicUser(user); }
 }
 
 export function createStorage(env = process.env) {
@@ -113,6 +114,11 @@ class SupabaseStorage {
 
   async setUserActive(id, active) {
     const { data, error } = await this.client.from("users").update({ active }).eq("id", id).select("id, identifier_type, identifier_label, role, active, created_at").maybeSingle();
+    check(error); return data ? mapUser(data) : null;
+  }
+
+  async setUserRole(id, role) {
+    const { data, error } = await this.client.from("users").update({ role }).eq("id", id).select("id, identifier_type, identifier_label, role, active, created_at").maybeSingle();
     check(error); return data ? mapUser(data) : null;
   }
 }
