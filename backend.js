@@ -12,7 +12,7 @@ import { z } from "zod";
 import { normalizeIdentifier } from "./auth.js";
 import { MercadoPagoSubscriptions, normalizeSubscription, subscriptionPlan } from "./payments.js";
 import { createStorage } from "./storage.js";
-import { runReminderDispatch, startReminderWorker, WhatsAppCloud } from "./whatsapp.js";
+import { runPushDispatch, startPushWorker, WebPushService } from "./push.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const profiles = ["Casa", "Empresa"];
@@ -36,7 +36,8 @@ const cardSchema = z.object({
   profile: z.enum(profiles),
 });
 const checkoutSchema = z.object({ payerEmail: z.string().trim().email().max(320) });
-const notificationSchema = z.object({ whatsappPhone: z.string().trim().max(20), whatsappEnabled: z.boolean(), reminderDays: z.coerce.number().int().min(1).max(30), consent: z.boolean() });
+const notificationSchema = z.object({ pushEnabled: z.boolean(), reminderDays: z.coerce.number().int().min(1).max(30) });
+const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048), keys: z.object({ p256dh: z.string().min(20).max(512), auth: z.string().min(8).max(256) }) });
 const freeLimits = { billsPerMonth: 10, cards: 1 };
 
 export async function createApp(options = {}) {
@@ -47,7 +48,7 @@ export async function createApp(options = {}) {
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
   const payments = options.payments || new MercadoPagoSubscriptions({ accessToken: env.MERCADOPAGO_ACCESS_TOKEN, siteUrl: env.SITE_URL || "https://ricoxp.com", price: env.PRO_PRICE || 29.9 });
-  const whatsapp = options.whatsapp || new WhatsAppCloud({ accessToken: env.WHATSAPP_ACCESS_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, templateName: env.WHATSAPP_TEMPLATE_NAME || "finance_due_reminder", language: env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR", graphVersion: env.WHATSAPP_GRAPH_VERSION || "v23.0" });
+  const push = options.push || new WebPushService({ publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT || `mailto:${env.ADMIN_EMAIL || "suporte@ricoxp.com"}` });
   const adminEmail = String(env.ADMIN_EMAIL || "apktemoficial@gmail.com").trim().toLowerCase();
   const app = express();
   app.set("trust proxy", 1);
@@ -131,18 +132,26 @@ export async function createApp(options = {}) {
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await storage.listData(req.user.id))));
   app.get("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
     const access = await getAccess(req.user);
-    return res.json({ ...await storage.getNotificationPreferences(req.user.id), configured: whatsapp.configured, available: access.plan === "pro" });
+    return res.json({ ...await storage.getNotificationPreferences(req.user.id), configured: push.configured, publicKey: push.configured ? push.publicKey : null, available: access.plan === "pro" });
   }));
   app.put("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
     const input = notificationSchema.parse(req.body);
     const access = await getAccess(req.user);
-    if (input.whatsappEnabled && access.plan !== "pro") return res.status(402).json({ error: "Alertas pelo WhatsApp são exclusivos do plano Pro." });
-    if (input.whatsappEnabled && !input.consent) return res.status(400).json({ error: "Confirme a autorização para receber alertas no WhatsApp." });
-    const phone = input.whatsappPhone.replace(/\D/g, "");
-    if (input.whatsappEnabled && !/^[1-9]\d{9,14}$/.test(phone)) return res.status(400).json({ error: "Informe o WhatsApp com DDI e DDD." });
-    const current = await storage.getNotificationPreferences(req.user.id);
-    const preferences = await storage.upsertNotificationPreferences(req.user.id, { whatsappPhone: phone, whatsappEnabled: input.whatsappEnabled, reminderDays: input.reminderDays, consentAt: input.whatsappEnabled ? current.consentAt || new Date().toISOString() : current.consentAt });
-    return res.json({ ...preferences, configured: whatsapp.configured, available: access.plan === "pro" });
+    if (input.pushEnabled && access.plan !== "pro") return res.status(402).json({ error: "Notificações automáticas são exclusivas do plano Pro." });
+    if (input.pushEnabled && !push.configured) return res.status(503).json({ error: "Notificações push ainda não configuradas." });
+    const preferences = await storage.upsertNotificationPreferences(req.user.id, input);
+    return res.json({ ...preferences, configured: push.configured, publicKey: push.configured ? push.publicKey : null, available: access.plan === "pro" });
+  }));
+  app.post("/api/notifications/subscriptions", authenticate, asyncRoute(async (req, res) => {
+    const access = await getAccess(req.user);
+    if (access.plan !== "pro") return res.status(402).json({ error: "Notificações automáticas são exclusivas do plano Pro." });
+    if (!push.configured) return res.status(503).json({ error: "Notificações push ainda não configuradas." });
+    return res.status(201).json(await storage.upsertPushSubscription(req.user.id, pushSubscriptionSchema.parse(req.body)));
+  }));
+  app.delete("/api/notifications/subscriptions", authenticate, asyncRoute(async (req, res) => {
+    const endpoint = z.object({ endpoint: z.string().url().max(2048) }).parse(req.body).endpoint;
+    await storage.deletePushSubscription(req.user.id, endpoint);
+    return res.status(204).end();
   }));
 
   app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
@@ -229,7 +238,7 @@ export async function createApp(options = {}) {
   }));
 
   app.get("/api/admin/overview", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await storage.adminOverview())));
-  app.post("/api/admin/notifications/run", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await runReminderDispatch(storage, whatsapp))));
+  app.post("/api/admin/notifications/run", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await runPushDispatch(storage, push))));
   app.get("/api/admin/users", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json({ users: await storage.adminUsers() })));
   app.get("/api/admin/users/:id/data", authenticate, adminOnly, asyncRoute(async (req, res) => {
     const user = await storage.getUser(req.params.id);
@@ -260,7 +269,7 @@ export async function createApp(options = {}) {
     console.error(error);
     return res.status(error.status || 500).json({ error: error.status ? error.message : "Não foi possível concluir a operação." });
   });
-  if (production && whatsapp.configured && options.startWorkers !== false) startReminderWorker(storage, whatsapp);
+  if (production && push.configured && options.startWorkers !== false) startPushWorker(storage, push);
   return app;
 }
 

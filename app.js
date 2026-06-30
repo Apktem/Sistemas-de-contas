@@ -41,6 +41,9 @@ async function enterApp(user) {
     history.replaceState({}, "", location.pathname);
     await loadSubscription(true);
     switchView("subscription", "Assinatura");
+  } else if (new URLSearchParams(location.search).get("abrir") === "lembretes") {
+    history.replaceState({}, "", location.pathname);
+    switchView("reminders", "Lembretes");
   } else switchView("dashboard", "Painel");
 }
 
@@ -64,15 +67,18 @@ async function loadNotificationPreferences() {
 function renderNotificationPreferences() {
   const preferences = state.notificationPreferences;
   if (!preferences) return;
-  $("#whatsappPhone").value = preferences.whatsappPhone || "";
   $("#reminderDays").value = preferences.reminderDays || 2;
-  $("#whatsappEnabled").checked = preferences.whatsappEnabled;
-  $("#whatsappEnabled").disabled = !preferences.available;
-  $("#whatsappConsent").checked = Boolean(preferences.consentAt);
-  $("#whatsappStatus").textContent = preferences.whatsappEnabled ? "Ativado" : "Desativado";
-  $("#whatsappStatus").className = `badge ${preferences.whatsappEnabled ? "active" : "inactive"}`;
-  if (!preferences.available) $("#whatsappStatus").textContent = "Disponível no Pro";
-  else if (!preferences.configured) $("#whatsappStatus").textContent = "Aguardando configuração";
+  const supported = pushSupported();
+  const permissionDenied = supported && Notification.permission === "denied";
+  $("#pushEnabled").checked = preferences.pushEnabled;
+  $("#pushEnabled").disabled = !preferences.available || !preferences.configured || !supported || permissionDenied;
+  $("#pushStatus").textContent = preferences.pushEnabled ? "Ativado" : "Desativado";
+  $("#pushStatus").className = `badge ${preferences.pushEnabled ? "active" : "inactive"}`;
+  $("#pushHelp").textContent = "No iPhone, adicione o sistema à Tela de Início antes de ativar.";
+  if (!preferences.available) $("#pushStatus").textContent = "Disponível no Pro";
+  else if (!preferences.configured) $("#pushStatus").textContent = "Aguardando configuração";
+  else if (!supported) { $("#pushStatus").textContent = "Não compatível"; $("#pushHelp").textContent = "Este navegador não oferece notificações push."; }
+  else if (permissionDenied) { $("#pushStatus").textContent = "Bloqueado"; $("#pushHelp").textContent = "Libere as notificações nas configurações do navegador ou do aparelho."; }
 }
 
 function renderSubscription() {
@@ -347,11 +353,42 @@ $("#cardList").addEventListener("click", async (event) => {
 els.notificationForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    state.notificationPreferences = await api("/api/notifications/preferences", { method: "PUT", body: JSON.stringify({ whatsappPhone: $("#whatsappPhone").value, whatsappEnabled: $("#whatsappEnabled").checked, reminderDays: Number($("#reminderDays").value), consent: $("#whatsappConsent").checked }) });
+    const pushEnabled = $("#pushEnabled").checked;
+    if (pushEnabled) await subscribeToPush(state.notificationPreferences.publicKey);
+    else await unsubscribeFromPush();
+    state.notificationPreferences = await api("/api/notifications/preferences", { method: "PUT", body: JSON.stringify({ pushEnabled, reminderDays: Number($("#reminderDays").value) }) });
     renderNotificationPreferences();
     setMessage(els.appMessage, "Preferências de alerta salvas.", true);
   } catch (error) { setMessage(els.appMessage, error.message); }
 });
+
+function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+
+async function subscribeToPush(publicKey) {
+  if (!pushSupported()) throw new Error("Este navegador não oferece notificações push.");
+  if (!publicKey) throw new Error("Notificações push ainda não configuradas.");
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error("Permita as notificações para receber os lembretes.");
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+  await api("/api/notifications/subscriptions", { method: "POST", body: JSON.stringify(subscription.toJSON()) });
+}
+
+async function unsubscribeFromPush() {
+  if (!pushSupported()) return;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return;
+  await api("/api/notifications/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint: subscription.endpoint }) }).catch(() => {});
+  await subscription.unsubscribe();
+}
+
+function urlBase64ToUint8Array(value) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+}
 
 $("#subscriptionForm").addEventListener("submit", async (event) => {
   event.preventDefault();

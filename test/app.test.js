@@ -4,7 +4,7 @@ import test from "node:test";
 import { isValidCpf } from "../auth.js";
 import { createApp } from "../backend.js";
 import { MemoryStorage } from "../storage.js";
-import { runReminderDispatch } from "../whatsapp.js";
+import { runPushDispatch } from "../push.js";
 
 test("valida CPF", () => {
   assert.equal(isValidCpf("529.982.247-25"), true);
@@ -123,15 +123,16 @@ test("cria parcelas futuras com tags e clona contas recorrentes", async (context
   assert.deepEqual(cloned.body.tags, ["fixa"]);
 });
 
-test("envia cada alerta de WhatsApp uma unica vez", async () => {
+test("envia cada notificação push uma unica vez", async () => {
   const storage = new MemoryStorage();
   const user = await storage.createUser({ email: "alerta@example.com", lookup: "alerta@example.com", identifierType: "email", identifierLabel: "alerta@example.com", passwordHash: "hash", role: "user" });
-  await storage.upsertNotificationPreferences(user.id, { whatsappPhone: "5511999999999", whatsappEnabled: true, reminderDays: 2, consentAt: "2026-06-30T12:00:00Z" });
+  await storage.upsertNotificationPreferences(user.id, { pushEnabled: true, reminderDays: 2 });
+  await storage.upsertPushSubscription(user.id, { endpoint: "https://push.example/device", keys: { p256dh: "public-key", auth: "auth-key" } });
   await storage.createBill(user.id, { name: "Internet", amount: 100, dueDate: "2026-07-02", profile: "Casa", category: "Servicos", status: "pending", tags: ["fixa"] });
   let sends = 0;
-  const whatsapp = { configured: true, async sendReminder() { sends += 1; return "wamid-1"; } };
-  assert.deepEqual(await runReminderDispatch(storage, whatsapp, new Date("2026-06-30T12:00:00")), { sent: 1, failed: 0 });
-  assert.deepEqual(await runReminderDispatch(storage, whatsapp, new Date("2026-06-30T12:00:00")), { sent: 0, failed: 0 });
+  const push = { configured: true, async send() { sends += 1; } };
+  assert.deepEqual(await runPushDispatch(storage, push, new Date("2026-06-30T12:00:00")), { sent: 1, failed: 0 });
+  assert.deepEqual(await runPushDispatch(storage, push, new Date("2026-06-30T12:00:00")), { sent: 0, failed: 0 });
   assert.equal(sends, 1);
 });
 

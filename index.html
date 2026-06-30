@@ -150,14 +150,13 @@
 
         <section id="remindersView" class="view">
           <section class="panel notification-panel">
-            <div class="panel-title"><div><h2>Alertas pelo WhatsApp</h2><p class="muted">Receba um aviso automático antes do vencimento.</p></div><span id="whatsappStatus" class="badge inactive">Desativado</span></div>
+            <div class="panel-title"><div><h2>Notificações do aparelho</h2><p class="muted">Receba avisos na barra de notificações antes do vencimento.</p></div><span id="pushStatus" class="badge inactive">Desativado</span></div>
             <form id="notificationForm" class="notification-form">
-              <label>WhatsApp com DDI e DDD<input id="whatsappPhone" type="tel" placeholder="Ex: 5511999999999" /></label>
               <label>Dias de antecedência<input id="reminderDays" type="number" min="1" max="30" value="2" required /></label>
-              <label class="check-label"><input id="whatsappEnabled" type="checkbox" /> Ativar alertas automáticos</label>
-              <label class="check-label consent-label"><input id="whatsappConsent" type="checkbox" /> Autorizo o envio de lembretes financeiros para este número.</label>
+              <label class="check-label"><input id="pushEnabled" type="checkbox" /> Ativar notificações neste aparelho</label>
               <button class="primary-button" type="submit">Salvar alertas</button>
             </form>
+            <p id="pushHelp" class="muted notification-help">No iPhone, adicione o sistema à Tela de Início antes de ativar.</p>
           </section>
           <section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section>
         </section>
@@ -170,7 +169,7 @@
             </article>
             <article class="plan-option featured">
               <div><span class="plan-label">Mais completo</span><h2>Pro</h2><strong>R$ 29,90</strong><small>por mês</small></div>
-              <ul><li>Contas e cartões ilimitados</li><li>Parcelamentos e clonagem mensal</li><li>Alertas automáticos pelo WhatsApp</li></ul>
+              <ul><li>Contas e cartões ilimitados</li><li>Parcelamentos e clonagem mensal</li><li>Notificações automáticas no aparelho</li></ul>
             </article>
           </div>
           <section class="panel subscription-panel">

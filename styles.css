@@ -107,6 +107,7 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
 .check-label input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--brand); }
 .consent-label { grid-column: 1 / -1; }
 .notification-form .primary-button { width: fit-content; }
+.notification-help { margin: 14px 0 0; }
 .plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .plan-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .plan-option.featured { border-top: 5px solid var(--brand); }

@@ -61,18 +61,33 @@ create index if not exists subscriptions_status_idx on public.subscriptions(stat
 
 create table if not exists public.notification_preferences (
   user_id uuid primary key references public.users(id) on delete cascade,
-  whatsapp_phone text,
-  whatsapp_enabled boolean not null default false,
+  push_enabled boolean not null default false,
   reminder_days integer not null default 2 check (reminder_days between 1 and 30),
-  consent_at timestamptz,
   updated_at timestamptz not null default now()
 );
+
+alter table public.notification_preferences add column if not exists push_enabled boolean not null default false;
+alter table public.notification_preferences drop column if exists whatsapp_phone;
+alter table public.notification_preferences drop column if exists whatsapp_enabled;
+alter table public.notification_preferences drop column if exists consent_at;
+
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions(user_id);
 
 create table if not exists public.notification_deliveries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   bill_id uuid not null references public.bills(id) on delete cascade,
-  channel text not null default 'whatsapp',
+  channel text not null default 'push',
   scheduled_for date not null,
   status text not null,
   provider_message_id text,
@@ -81,11 +96,14 @@ create table if not exists public.notification_deliveries (
   unique (bill_id, channel, scheduled_for)
 );
 
+delete from public.notification_deliveries where channel = 'whatsapp';
+
 alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.notification_deliveries enable row level security;
+alter table public.push_subscriptions enable row level security;
 
-revoke all on public.users, public.bills, public.cards, public.subscriptions, public.notification_preferences, public.notification_deliveries from anon, authenticated;
+revoke all on public.users, public.bills, public.cards, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
