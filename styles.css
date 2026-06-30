@@ -24,6 +24,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .login-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: linear-gradient(135deg, #edf7f4, #f8f4e9); }
 .login-panel { width: min(900px, 100%); display: grid; grid-template-columns: 1.05fr .95fr; gap: 42px; align-items: center; padding: 42px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
 .login-brand h1 { margin: 0; max-width: 620px; font-size: clamp(2.25rem, 6vw, 4.25rem); line-height: 1; }
+.brand-logo { display: block; width: 112px; height: 112px; margin: 0 0 24px; border-radius: 8px; object-fit: contain; }
 .login-brand > p:last-child { color: var(--muted); font-size: 1.05rem; }
 .auth-box { min-width: 0; }
 .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: #f2f5f4; }
