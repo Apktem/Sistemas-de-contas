@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -11,7 +11,9 @@ export class MemoryStorage {
   }
   async getUser(id) { const user = this.users.find((item) => item.id === id); return user ? publicUser(user) : null; }
   async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId) }; }
+  async getBill(userId, id) { return this.bills.find((item) => item.id === id && item.userId === userId) || null; }
   async createBill(userId, data) { const bill = { id: randomUUID(), userId, ...data }; this.bills.push(bill); return bill; }
+  async createBills(userId, entries) { const bills = entries.map((data) => ({ id: randomUUID(), userId, ...data })); this.bills.push(...bills); return bills; }
   async updateBill(userId, id, data) { const index = this.bills.findIndex((item) => item.id === id && item.userId === userId); if (index < 0) return null; this.bills[index] = { ...this.bills[index], ...data }; return this.bills[index]; }
   async deleteBill(userId, id) { const before = this.bills.length; this.bills = this.bills.filter((item) => !(item.id === id && item.userId === userId)); return this.bills.length < before; }
   async createCard(userId, data) { const card = { id: randomUUID(), userId, ...data }; this.cards.push(card); return card; }
@@ -19,6 +21,11 @@ export class MemoryStorage {
   async getSubscription(userId) { return this.subscriptions.find((item) => item.userId === userId) || null; }
   async getSubscriptionByProviderId(providerId) { return this.subscriptions.find((item) => item.providerId === providerId) || null; }
   async upsertSubscription(data) { const index = this.subscriptions.findIndex((item) => item.userId === data.userId); const item = { ...(index >= 0 ? this.subscriptions[index] : {}), ...data }; if (index >= 0) this.subscriptions[index] = item; else this.subscriptions.push(item); return item; }
+  async getNotificationPreferences(userId) { return this.notificationPreferences.find((item) => item.userId === userId) || { userId, whatsappPhone: "", whatsappEnabled: false, reminderDays: 2, consentAt: null }; }
+  async upsertNotificationPreferences(userId, data) { const index = this.notificationPreferences.findIndex((item) => item.userId === userId); const item = { userId, ...data, updatedAt: new Date().toISOString() }; if (index >= 0) this.notificationPreferences[index] = item; else this.notificationPreferences.push(item); return item; }
+  async listWhatsAppReminders(today) { return buildReminders(this.notificationPreferences, this.bills, today); }
+  async getNotificationDelivery(billId, scheduledFor) { return this.notificationDeliveries.find((item) => item.billId === billId && item.scheduledFor === scheduledFor) || null; }
+  async recordNotificationDelivery(data) { const index = this.notificationDeliveries.findIndex((item) => item.billId === data.billId && item.scheduledFor === data.scheduledFor); const item = { id: index >= 0 ? this.notificationDeliveries[index].id : randomUUID(), ...data }; if (index >= 0) this.notificationDeliveries[index] = item; else this.notificationDeliveries.push(item); return item; }
   async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter((item) => item.status === "authorized").length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
   async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && item.status === "authorized") ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null, billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
   async setUserActive(id, active) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.active = active; return publicUser(user); }
@@ -57,24 +64,38 @@ class SupabaseStorage {
 
   async listData(userId) {
     const [{ data: bills, error: billsError }, { data: cards, error: cardsError }] = await Promise.all([
-      this.client.from("bills").select("id, name, amount, due_date, profile, category, status").eq("user_id", userId).order("due_date"),
+      this.client.from("bills").select("*").eq("user_id", userId).order("due_date"),
       this.client.from("cards").select("id, name, credit_limit, close_day, due_day, profile").eq("user_id", userId).order("name"),
     ]);
     check(billsError); check(cardsError);
     return { bills: bills.map(mapBill), cards: cards.map(mapCard) };
   }
 
+  async getBill(userId, id) {
+    const { data, error } = await this.client.from("bills").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
+    check(error); return data ? mapBill(data) : null;
+  }
+
   async createBill(userId, data) {
     const row = toBillRow(randomUUID(), userId, data);
-    const { data: created, error } = await this.client.from("bills").insert(row).select("id, name, amount, due_date, profile, category, status").single();
-    check(error); return mapBill(created);
+    let result = await this.client.from("bills").insert(row).select("*").single();
+    if (isMissingFeatureColumn(result.error)) result = await this.client.from("bills").insert(toLegacyBillRow(row)).select("*").single();
+    check(result.error); return mapBill(result.data);
+  }
+
+  async createBills(userId, entries) {
+    const rows = entries.map((data) => toBillRow(randomUUID(), userId, data));
+    let result = await this.client.from("bills").insert(rows).select("*");
+    if (isMissingFeatureColumn(result.error)) result = await this.client.from("bills").insert(rows.map(toLegacyBillRow)).select("*");
+    check(result.error); return result.data.map(mapBill);
   }
 
   async updateBill(userId, id, data) {
     const row = toBillRow(id, userId, data);
     delete row.id; delete row.user_id;
-    const { data: updated, error } = await this.client.from("bills").update(row).eq("id", id).eq("user_id", userId).select("id, name, amount, due_date, profile, category, status").maybeSingle();
-    check(error); return updated ? mapBill(updated) : null;
+    let result = await this.client.from("bills").update(row).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+    if (isMissingFeatureColumn(result.error)) result = await this.client.from("bills").update(toLegacyBillRow(row)).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+    check(result.error); return result.data ? mapBill(result.data) : null;
   }
 
   async deleteBill(userId, id) {
@@ -110,6 +131,40 @@ class SupabaseStorage {
     const { data: saved, error } = await this.client.from("subscriptions").upsert(row, { onConflict: "user_id" }).select("*").single();
     if (isMissingSubscriptionTable(error)) { const migrationError = new Error("A tabela de assinaturas ainda nao foi criada no Supabase."); migrationError.status = 503; throw migrationError; }
     check(error); return mapSubscription(saved);
+  }
+
+  async getNotificationPreferences(userId) {
+    const { data, error } = await this.client.from("notification_preferences").select("*").eq("user_id", userId).maybeSingle();
+    if (isMissingFeatureTable(error)) return { userId, whatsappPhone: "", whatsappEnabled: false, reminderDays: 2, consentAt: null };
+    check(error); return data ? mapNotificationPreferences(data) : { userId, whatsappPhone: "", whatsappEnabled: false, reminderDays: 2, consentAt: null };
+  }
+
+  async upsertNotificationPreferences(userId, data) {
+    const row = { user_id: userId, whatsapp_phone: data.whatsappPhone, whatsapp_enabled: data.whatsappEnabled, reminder_days: data.reminderDays, consent_at: data.consentAt, updated_at: new Date().toISOString() };
+    const { data: saved, error } = await this.client.from("notification_preferences").upsert(row, { onConflict: "user_id" }).select("*").single();
+    check(error); return mapNotificationPreferences(saved);
+  }
+
+  async listWhatsAppReminders(today) {
+    const { data: preferences, error: preferencesError } = await this.client.from("notification_preferences").select("*").eq("whatsapp_enabled", true);
+    if (isMissingFeatureTable(preferencesError) || !preferences?.length) return [];
+    check(preferencesError);
+    const maxDate = addDays(today, 30);
+    const { data: bills, error: billsError } = await this.client.from("bills").select("*").in("user_id", preferences.map((item) => item.user_id)).eq("status", "pending").gte("due_date", addDays(today, 1)).lte("due_date", maxDate);
+    check(billsError);
+    return buildReminders(preferences.map(mapNotificationPreferences), bills.map(mapBill), today);
+  }
+
+  async getNotificationDelivery(billId, scheduledFor) {
+    const { data, error } = await this.client.from("notification_deliveries").select("*").eq("bill_id", billId).eq("scheduled_for", scheduledFor).maybeSingle();
+    if (isMissingFeatureTable(error)) return null;
+    check(error); return data ? mapNotificationDelivery(data) : null;
+  }
+
+  async recordNotificationDelivery(data) {
+    const row = { user_id: data.userId, bill_id: data.billId, scheduled_for: data.scheduledFor, channel: "whatsapp", status: data.status, provider_message_id: data.providerMessageId, error: data.error, updated_at: new Date().toISOString() };
+    const { data: saved, error } = await this.client.from("notification_deliveries").upsert(row, { onConflict: "bill_id,channel,scheduled_for" }).select("*").single();
+    check(error); return mapNotificationDelivery(saved);
   }
 
   async adminOverview() {
@@ -150,10 +205,13 @@ class SupabaseStorage {
   }
 }
 
-function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.name, amount: data.amount, due_date: data.dueDate, profile: data.profile, category: data.category, status: data.status }; }
-function mapBill(row) { return { id: row.id, name: row.name, amount: Number(row.amount), dueDate: row.due_date, profile: row.profile, category: row.category, status: row.status }; }
+function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.name, amount: data.amount, due_date: data.dueDate, profile: data.profile, category: data.category, status: data.status, tags: data.tags || [], series_id: data.seriesId || null, series_type: data.seriesType || "single", installment_number: data.installmentNumber || null, installment_total: data.installmentTotal || null }; }
+function toLegacyBillRow(row) { const { tags, series_id, series_type, installment_number, installment_total, ...legacy } = row; return legacy; }
+function mapBill(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, amount: Number(row.amount), dueDate: row.due_date || row.dueDate, profile: row.profile, category: row.category, status: row.status, tags: row.tags || [], seriesId: row.series_id || row.seriesId || null, seriesType: row.series_type || row.seriesType || "single", installmentNumber: row.installment_number || row.installmentNumber || null, installmentTotal: row.installment_total || row.installmentTotal || null }; }
 function mapCard(row) { return { id: row.id, name: row.name, limit: Number(row.credit_limit), closeDay: row.close_day, dueDay: row.due_day, profile: row.profile }; }
 function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }
+function mapNotificationPreferences(row) { return { userId: row.user_id, whatsappPhone: row.whatsapp_phone || "", whatsappEnabled: Boolean(row.whatsapp_enabled), reminderDays: Number(row.reminder_days || 2), consentAt: row.consent_at || null, updatedAt: row.updated_at || null }; }
+function mapNotificationDelivery(row) { return { id: row.id, userId: row.user_id, billId: row.bill_id, scheduledFor: row.scheduled_for, status: row.status, providerMessageId: row.provider_message_id, error: row.error }; }
 function mapUser(row, includePassword = false) {
   const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, role: row.role, active: Boolean(row.active), createdAt: row.created_at };
   if (includePassword) user.passwordHash = row.password_hash;
@@ -162,8 +220,20 @@ function mapUser(row, includePassword = false) {
 function publicUser(user) { return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt }; }
 function check(error) { if (error) { const wrapped = new Error(error.message); wrapped.code = error.code; throw wrapped; } }
 function isMissingSubscriptionTable(error) { return error?.code === "42P01" || error?.code === "PGRST205"; }
+function isMissingFeatureTable(error) { return error?.code === "42P01" || error?.code === "PGRST205"; }
+function isMissingFeatureColumn(error) { return error?.code === "42703" || error?.code === "PGRST204"; }
 function duplicateError() { const error = new Error("Conta já cadastrada."); error.code = "ER_DUP_ENTRY"; return error; }
 function isPublicKey(key) {
   if (key.startsWith("sb_publishable_")) return true;
   try { return JSON.parse(Buffer.from(key.split(".")[1], "base64url").toString()).role === "anon"; } catch { return false; }
 }
+
+function buildReminders(preferences, bills, today) {
+  return preferences.flatMap((preference) => bills
+    .filter((bill) => bill.userId === preference.userId && bill.status === "pending")
+    .map((bill) => ({ bill, days: daysBetween(today, bill.dueDate) }))
+    .filter((item) => item.days === preference.reminderDays)
+    .map((item) => ({ ...item, userId: preference.userId, phone: preference.whatsappPhone })));
+}
+function daysBetween(from, to) { return Math.round((new Date(`${to}T12:00:00`) - new Date(`${from}T12:00:00`)) / 86400000); }
+function addDays(value, days) { const date = new Date(`${value}T12:00:00`); date.setDate(date.getDate() + days); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }

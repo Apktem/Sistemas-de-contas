@@ -1,11 +1,11 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null };
+const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null, notificationPreferences: null };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 const els = {
   loginScreen: $("#loginScreen"), appScreen: $("#appScreen"), loginForm: $("#loginForm"), registerForm: $("#registerForm"),
   authMessage: $("#authMessage"), appMessage: $("#appMessage"), monthFilter: $("#monthFilter"), profileFilter: $("#profileFilter"),
-  billForm: $("#billForm"), cardForm: $("#cardForm"), cancelEditButton: $("#cancelEditButton"), financeFilters: $("#financeFilters"),
+  billForm: $("#billForm"), cardForm: $("#cardForm"), notificationForm: $("#notificationForm"), cancelEditButton: $("#cancelEditButton"), financeFilters: $("#financeFilters"),
 };
 
 async function api(url, options = {}) {
@@ -36,7 +36,7 @@ async function enterApp(user) {
   $("#adminNav").classList.toggle("hidden", user.role !== "admin");
   els.loginScreen.classList.add("hidden");
   els.appScreen.classList.remove("hidden");
-  await Promise.all([loadData(), loadSubscription()]);
+  await Promise.all([loadData(), loadSubscription(), loadNotificationPreferences()]);
   if (new URLSearchParams(location.search).get("assinatura") === "retorno") {
     history.replaceState({}, "", location.pathname);
     await loadSubscription(true);
@@ -54,6 +54,25 @@ async function loadData() {
 async function loadSubscription(sync = false) {
   state.subscription = await api(sync ? "/api/subscription/sync" : "/api/subscription", sync ? { method: "POST" } : {});
   renderSubscription();
+}
+
+async function loadNotificationPreferences() {
+  state.notificationPreferences = await api("/api/notifications/preferences");
+  renderNotificationPreferences();
+}
+
+function renderNotificationPreferences() {
+  const preferences = state.notificationPreferences;
+  if (!preferences) return;
+  $("#whatsappPhone").value = preferences.whatsappPhone || "";
+  $("#reminderDays").value = preferences.reminderDays || 2;
+  $("#whatsappEnabled").checked = preferences.whatsappEnabled;
+  $("#whatsappEnabled").disabled = !preferences.available;
+  $("#whatsappConsent").checked = Boolean(preferences.consentAt);
+  $("#whatsappStatus").textContent = preferences.whatsappEnabled ? "Ativado" : "Desativado";
+  $("#whatsappStatus").className = `badge ${preferences.whatsappEnabled ? "active" : "inactive"}`;
+  if (!preferences.available) $("#whatsappStatus").textContent = "Disponível no Pro";
+  else if (!preferences.configured) $("#whatsappStatus").textContent = "Aguardando configuração";
 }
 
 function renderSubscription() {
@@ -96,6 +115,7 @@ function render() {
   renderLists();
   renderTable();
   renderCards();
+  renderForecast();
 }
 
 function renderMetrics() {
@@ -165,12 +185,25 @@ function drawRows(selector, bills, emptyText) {
   }).join("");
 }
 
+function renderForecast() {
+  const profile = els.profileFilter.value;
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const key = monthKeyFromOffset(els.monthFilter.value, index + 1);
+    const bills = state.bills.filter((bill) => bill.dueDate.startsWith(key) && (profile === "all" || bill.profile === profile));
+    return { key, count: bills.length, total: bills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+  });
+  const max = Math.max(...months.map((item) => item.total), 1);
+  $("#forecastList").innerHTML = months.map((item) => `<div class="forecast-row"><span>${new Date(`${item.key}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span><div class="forecast-track"><i style="width:${Math.round((item.total / max) * 100)}%"></i></div><strong>${money.format(item.total)}</strong><small>${item.count} ${item.count === 1 ? "conta" : "contas"}</small></div>`).join("");
+}
+
 function renderTable() {
   const bills = getFilteredBills();
   $("#billTable").innerHTML = bills.length ? bills.map((bill) => {
     const situation = billSituation(bill);
-    return `<tr><td>${escapeHtml(bill.name)}</td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button><button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
-  }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
+    const tags = bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : '<span class="muted">-</span>';
+    const cloneButton = bill.seriesType === "installment" ? "" : `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>`;
+    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
+  }).join("") : '<tr><td colspan="7">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
 function renderCards() {
@@ -187,6 +220,8 @@ function resetBillForm() {
   els.billForm.reset();
   $("#billId").value = "";
   $("#billDueDate").value = `${els.monthFilter.value}-10`;
+  $("#billInstallments").value = "1";
+  $("#billInstallments").disabled = false;
   els.cancelEditButton.classList.add("hidden");
 }
 
@@ -198,6 +233,7 @@ function switchView(view, title) {
   els.financeFilters.classList.toggle("hidden", view === "admin" || view === "subscription");
   if (view === "admin") loadAdmin();
   if (view === "subscription") loadSubscription();
+  if (view === "reminders") loadNotificationPreferences();
 }
 
 async function loadAdmin() {
@@ -234,6 +270,7 @@ function exportCsv() {
   const link = document.createElement("a"); link.href = url; link.download = `contas-${els.monthFilter.value}.csv`; link.click(); URL.revokeObjectURL(url);
 }
 
+function monthKeyFromOffset(value, offset) { const [year, month] = value.split("-").map(Number); const date = new Date(year, month - 1 + offset, 1, 12); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function formatDate(value) { return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR"); }
 function statusLabel(status) { return { paid: "Pago", pending: "A vencer", overdue: "Vencida" }[status]; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
@@ -272,7 +309,7 @@ els.cancelEditButton.addEventListener("click", resetBillForm);
 els.billForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = $("#billId").value;
-  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value };
+  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value) };
   try {
     await api(id ? `/api/bills/${id}` : "/api/bills", { method: id ? "PUT" : "POST", body: JSON.stringify(bill) });
     await loadData(); resetBillForm(); setMessage(els.appMessage, "Conta salva.", true);
@@ -285,11 +322,12 @@ $("#billTable").addEventListener("click", async (event) => {
   const bill = state.bills.find((item) => item.id === button.dataset.id);
   if (!bill) return;
   if (button.dataset.action === "edit") {
-    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; els.cancelEditButton.classList.remove("hidden"); return;
+    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; $("#billTags").value = (bill.tags || []).join(", "); $("#billInstallments").value = "1"; $("#billInstallments").disabled = true; els.cancelEditButton.classList.remove("hidden"); return;
   }
   try {
     if (button.dataset.action === "delete") await api(`/api/bills/${bill.id}`, { method: "DELETE" });
     if (button.dataset.action === "toggle") await api(`/api/bills/${bill.id}`, { method: "PUT", body: JSON.stringify({ ...bill, status: bill.status === "paid" ? "pending" : "paid" }) });
+    if (button.dataset.action === "clone") { const cloned = await api(`/api/bills/${bill.id}/clone`, { method: "POST" }); setMessage(els.appMessage, `Conta clonada para ${formatDate(cloned.dueDate)}.`, true); }
     await loadData();
   } catch (error) { setMessage(els.appMessage, error.message); }
 });
@@ -304,6 +342,15 @@ $("#cardList").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-card-delete]");
   if (!button) return;
   try { await api(`/api/cards/${button.dataset.cardDelete}`, { method: "DELETE" }); await loadData(); } catch (error) { setMessage(els.appMessage, error.message); }
+});
+
+els.notificationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    state.notificationPreferences = await api("/api/notifications/preferences", { method: "PUT", body: JSON.stringify({ whatsappPhone: $("#whatsappPhone").value, whatsappEnabled: $("#whatsappEnabled").checked, reminderDays: Number($("#reminderDays").value), consent: $("#whatsappConsent").checked }) });
+    renderNotificationPreferences();
+    setMessage(els.appMessage, "Preferências de alerta salvas.", true);
+  } catch (error) { setMessage(els.appMessage, error.message); }
 });
 
 $("#subscriptionForm").addEventListener("submit", async (event) => {

@@ -72,6 +72,7 @@
             <section class="panel"><div class="panel-title"><h2>Situação das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><canvas id="statusChart" width="280" height="280" aria-label="Gráfico de contas"></canvas></div></section>
             <section class="panel"><div class="panel-title"><h2>Próximos vencimentos</h2><span>7 dias</span></div><div id="upcomingList" class="stack-list"></div></section>
           </div>
+          <section class="panel"><div class="panel-title"><h2>Previsão dos próximos meses</h2><span>6 meses</span></div><div id="forecastList" class="forecast-list"></div></section>
         </section>
 
         <section id="billsView" class="view">
@@ -79,17 +80,19 @@
             <form id="billForm" class="data-form">
               <input type="hidden" id="billId" />
               <label>Nome<input id="billName" type="text" placeholder="Ex: Aluguel" required /></label>
-              <label>Valor<input id="billAmount" type="number" min="0.01" step="0.01" required /></label>
+              <label>Valor total<input id="billAmount" type="number" min="0.01" step="0.01" required /></label>
               <label>Vencimento<input id="billDueDate" type="date" required /></label>
               <label>Perfil<select id="billProfile"><option>Casa</option><option>Empresa</option></select></label>
               <label>Categoria<select id="billCategory"><option>Moradia</option><option>Servicos</option><option>Cartao</option><option>Impostos</option><option>Saude</option><option>Equipe</option><option>Outros</option></select></label>
               <label>Status<select id="billStatus"><option value="pending">A vencer</option><option value="paid">Pago</option></select></label>
+              <label>Tags<input id="billTags" type="text" maxlength="180" placeholder="Ex: fixa, casa" /></label>
+              <label>Parcelas<input id="billInstallments" type="number" min="1" max="60" value="1" required /></label>
               <button class="primary-button" type="submit">Salvar conta</button>
               <button id="cancelEditButton" class="ghost-button hidden" type="button">Cancelar edição</button>
             </form>
           </section>
           <section class="panel"><div class="panel-title"><h2>Contas do mês</h2><button id="exportButton" class="ghost-button" type="button">Exportar CSV</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead><tbody id="billTable"></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Tags</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead><tbody id="billTable"></tbody></table></div>
           </section>
         </section>
 
@@ -107,7 +110,19 @@
           <div id="cardList" class="card-grid"></div>
         </section>
 
-        <section id="remindersView" class="view"><section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section></section>
+        <section id="remindersView" class="view">
+          <section class="panel notification-panel">
+            <div class="panel-title"><div><h2>Alertas pelo WhatsApp</h2><p class="muted">Receba um aviso automático antes do vencimento.</p></div><span id="whatsappStatus" class="badge inactive">Desativado</span></div>
+            <form id="notificationForm" class="notification-form">
+              <label>WhatsApp com DDI e DDD<input id="whatsappPhone" type="tel" placeholder="Ex: 5511999999999" /></label>
+              <label>Dias de antecedência<input id="reminderDays" type="number" min="1" max="30" value="2" required /></label>
+              <label class="check-label"><input id="whatsappEnabled" type="checkbox" /> Ativar alertas automáticos</label>
+              <label class="check-label consent-label"><input id="whatsappConsent" type="checkbox" /> Autorizo o envio de lembretes financeiros para este número.</label>
+              <button class="primary-button" type="submit">Salvar alertas</button>
+            </form>
+          </section>
+          <section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section>
+        </section>
 
         <section id="subscriptionView" class="view">
           <div class="plan-grid">
@@ -117,7 +132,7 @@
             </article>
             <article class="plan-option featured">
               <div><span class="plan-label">Mais completo</span><h2>Pro</h2><strong>R$ 29,90</strong><small>por mês</small></div>
-              <ul><li>Contas ilimitadas</li><li>Cartões ilimitados</li><li>Todos os recursos atuais</li></ul>
+              <ul><li>Contas e cartões ilimitados</li><li>Parcelamentos e clonagem mensal</li><li>Alertas automáticos pelo WhatsApp</li></ul>
             </article>
           </div>
           <section class="panel subscription-panel">
