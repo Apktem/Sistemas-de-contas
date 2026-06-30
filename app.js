@@ -1,5 +1,7 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null, notificationPreferences: null };
+let deferredInstallPrompt = null;
+const installDismissedKey = "ricoxp-install-dismissed-at";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 const els = {
@@ -45,7 +47,41 @@ async function enterApp(user) {
     history.replaceState({}, "", location.pathname);
     switchView("reminders", "Lembretes");
   } else switchView("dashboard", "Painel");
+  setTimeout(showInstallPrompt, 900);
 }
+
+function isStandalone() { return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
+function isIos() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isMobileScreen() { return window.matchMedia("(max-width: 820px)").matches; }
+function installPromptRecentlyDismissed() {
+  try {
+    const dismissedAt = Number(localStorage.getItem(installDismissedKey) || 0);
+    return dismissedAt && Date.now() - dismissedAt < 30 * 24 * 60 * 60 * 1000;
+  } catch { return false; }
+}
+function showInstallPrompt() {
+  if (!state.user || isStandalone() || !isMobileScreen() || installPromptRecentlyDismissed()) return;
+  if (!deferredInstallPrompt && !isIos()) return;
+  $("#installAppButton").textContent = isIos() ? "Como instalar" : "Instalar aplicativo";
+  $("#installAppButton").classList.remove("hidden");
+  $("#installPrompt").classList.remove("hidden");
+}
+function hideInstallPrompt(remember = false) {
+  $("#installPrompt").classList.add("hidden");
+  $("#iosInstallSteps").classList.add("hidden");
+  if (remember) try { localStorage.setItem(installDismissedKey, String(Date.now())); } catch {}
+}
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  showInstallPrompt();
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  try { localStorage.removeItem(installDismissedKey); } catch {}
+  hideInstallPrompt();
+});
 
 async function loadData() {
   const data = await api("/api/data");
@@ -306,6 +342,19 @@ els.registerForm.addEventListener("submit", async (event) => {
 });
 
 $("#logoutButton").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }).catch(() => {}); showAuth(); });
+$("#dismissInstallButton").addEventListener("click", () => hideInstallPrompt(true));
+$("#installAppButton").addEventListener("click", async () => {
+  if (isIos()) {
+    $("#iosInstallSteps").classList.remove("hidden");
+    $("#installAppButton").classList.add("hidden");
+    return;
+  }
+  if (!deferredInstallPrompt) return;
+  await deferredInstallPrompt.prompt();
+  const choice = await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  hideInstallPrompt(choice.outcome !== "accepted");
+});
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
 els.profileFilter.addEventListener("change", render);
