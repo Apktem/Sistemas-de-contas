@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ import { z } from "zod";
 import { normalizeIdentifier } from "./auth.js";
 import { MercadoPagoSubscriptions, normalizeSubscription, subscriptionPlan } from "./payments.js";
 import { createStorage } from "./storage.js";
+import { runReminderDispatch, startReminderWorker, WhatsAppCloud } from "./whatsapp.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const profiles = ["Casa", "Empresa"];
@@ -24,7 +25,9 @@ const billSchema = z.object({
   profile: z.enum(profiles),
   category: z.enum(categories),
   status: z.enum(["pending", "paid"]),
+  tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
 });
+const billCreateSchema = billSchema.extend({ installments: z.coerce.number().int().min(1).max(60).default(1) });
 const cardSchema = z.object({
   name: z.string().trim().min(2).max(120),
   limit: z.coerce.number().positive().max(999999999.99),
@@ -33,6 +36,7 @@ const cardSchema = z.object({
   profile: z.enum(profiles),
 });
 const checkoutSchema = z.object({ payerEmail: z.string().trim().email().max(320) });
+const notificationSchema = z.object({ whatsappPhone: z.string().trim().max(20), whatsappEnabled: z.boolean(), reminderDays: z.coerce.number().int().min(1).max(30), consent: z.boolean() });
 const freeLimits = { billsPerMonth: 10, cards: 1 };
 
 export async function createApp(options = {}) {
@@ -43,6 +47,7 @@ export async function createApp(options = {}) {
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
   const payments = options.payments || new MercadoPagoSubscriptions({ accessToken: env.MERCADOPAGO_ACCESS_TOKEN, siteUrl: env.SITE_URL || "https://ricoxp.com", price: env.PRO_PRICE || 29.9 });
+  const whatsapp = options.whatsapp || new WhatsAppCloud({ accessToken: env.WHATSAPP_ACCESS_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, templateName: env.WHATSAPP_TEMPLATE_NAME || "finance_due_reminder", language: env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR", graphVersion: env.WHATSAPP_GRAPH_VERSION || "v23.0" });
   const adminEmail = String(env.ADMIN_EMAIL || "apktemoficial@gmail.com").trim().toLowerCase();
   const app = express();
   app.set("trust proxy", 1);
@@ -76,6 +81,17 @@ export async function createApp(options = {}) {
   const getAccess = async (user) => {
     const subscription = await storage.getSubscription(user.id);
     return { subscription, plan: subscriptionPlan(subscription, user.role) };
+  };
+  const ensureBillCapacity = async (user, entries, excludedId = null) => {
+    const access = await getAccess(user);
+    if (access.plan === "pro") return;
+    const data = await storage.listData(user.id);
+    const existing = data.bills.filter((item) => item.id !== excludedId);
+    const months = new Set(entries.map((item) => item.dueDate.slice(0, 7)));
+    for (const month of months) {
+      const count = existing.filter((item) => item.dueDate.startsWith(month)).length + entries.filter((item) => item.dueDate.startsWith(month)).length;
+      if (count > freeLimits.billsPerMonth) throw serviceError(`O plano gratis permite ${freeLimits.billsPerMonth} contas por mes. Assine o Pro para continuar.`, 402);
+    }
   };
 
   app.post("/api/register", authLimiter, asyncRoute(async (req, res) => {
@@ -113,20 +129,48 @@ export async function createApp(options = {}) {
   });
   app.get("/api/session", authenticate, (req, res) => res.json({ user: req.user }));
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await storage.listData(req.user.id))));
+  app.get("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
+    const access = await getAccess(req.user);
+    return res.json({ ...await storage.getNotificationPreferences(req.user.id), configured: whatsapp.configured, available: access.plan === "pro" });
+  }));
+  app.put("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
+    const input = notificationSchema.parse(req.body);
+    const access = await getAccess(req.user);
+    if (input.whatsappEnabled && access.plan !== "pro") return res.status(402).json({ error: "Alertas pelo WhatsApp são exclusivos do plano Pro." });
+    if (input.whatsappEnabled && !input.consent) return res.status(400).json({ error: "Confirme a autorização para receber alertas no WhatsApp." });
+    const phone = input.whatsappPhone.replace(/\D/g, "");
+    if (input.whatsappEnabled && !/^[1-9]\d{9,14}$/.test(phone)) return res.status(400).json({ error: "Informe o WhatsApp com DDI e DDD." });
+    const current = await storage.getNotificationPreferences(req.user.id);
+    const preferences = await storage.upsertNotificationPreferences(req.user.id, { whatsappPhone: phone, whatsappEnabled: input.whatsappEnabled, reminderDays: input.reminderDays, consentAt: input.whatsappEnabled ? current.consentAt || new Date().toISOString() : current.consentAt });
+    return res.json({ ...preferences, configured: whatsapp.configured, available: access.plan === "pro" });
+  }));
 
   app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
-    const bill = billSchema.parse(req.body);
+    const input = billCreateSchema.parse(req.body);
     const access = await getAccess(req.user);
-    if (access.plan === "free") {
-      const data = await storage.listData(req.user.id);
-      const monthCount = data.bills.filter((item) => item.dueDate.slice(0, 7) === bill.dueDate.slice(0, 7)).length;
-      if (monthCount >= freeLimits.billsPerMonth) return res.status(402).json({ error: `O plano gratis permite ${freeLimits.billsPerMonth} contas por mes. Assine o Pro para continuar.` });
-    }
-    return res.status(201).json(await storage.createBill(req.user.id, bill));
+    if (input.installments > 1 && access.plan !== "pro") return res.status(402).json({ error: "Contas parceladas são exclusivas do plano Pro." });
+    const entries = createBillEntries(input);
+    await ensureBillCapacity(req.user, entries);
+    return res.status(201).json({ bills: await storage.createBills(req.user.id, entries) });
   }));
   app.put("/api/bills/:id", authenticate, asyncRoute(async (req, res) => {
-    const bill = await storage.updateBill(req.user.id, req.params.id, billSchema.parse(req.body));
+    const existing = await storage.getBill(req.user.id, req.params.id);
+    if (!existing) return res.status(404).json({ error: "Conta não encontrada." });
+    const input = billSchema.parse(req.body);
+    const entry = { ...input, seriesId: existing.seriesId, seriesType: existing.seriesType, installmentNumber: existing.installmentNumber, installmentTotal: existing.installmentTotal };
+    await ensureBillCapacity(req.user, [entry], req.params.id);
+    const bill = await storage.updateBill(req.user.id, req.params.id, entry);
     return bill ? res.json(bill) : res.status(404).json({ error: "Conta não encontrada." });
+  }));
+  app.post("/api/bills/:id/clone", authenticate, asyncRoute(async (req, res) => {
+    const access = await getAccess(req.user);
+    if (access.plan !== "pro") return res.status(402).json({ error: "Clonagem mensal é exclusiva do plano Pro." });
+    const existing = await storage.getBill(req.user.id, req.params.id);
+    if (!existing) return res.status(404).json({ error: "Conta não encontrada." });
+    if (existing.seriesType === "installment") return res.status(400).json({ error: "Parcelas futuras já foram criadas automaticamente." });
+    const cloned = { ...existing, id: undefined, dueDate: addMonths(existing.dueDate, 1), status: "pending", seriesId: existing.seriesId || randomUUID(), seriesType: "recurring", installmentNumber: null, installmentTotal: null };
+    await ensureBillCapacity(req.user, [cloned]);
+    return res.status(201).json(await storage.createBill(req.user.id, cloned));
   }));
   app.delete("/api/bills/:id", authenticate, asyncRoute(async (req, res) => {
     const deleted = await storage.deleteBill(req.user.id, req.params.id);
@@ -185,6 +229,7 @@ export async function createApp(options = {}) {
   }));
 
   app.get("/api/admin/overview", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await storage.adminOverview())));
+  app.post("/api/admin/notifications/run", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await runReminderDispatch(storage, whatsapp))));
   app.get("/api/admin/users", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json({ users: await storage.adminUsers() })));
   app.get("/api/admin/users/:id/data", authenticate, adminOnly, asyncRoute(async (req, res) => {
     const user = await storage.getUser(req.params.id);
@@ -215,12 +260,43 @@ export async function createApp(options = {}) {
     console.error(error);
     return res.status(error.status || 500).json({ error: error.status ? error.message : "Não foi possível concluir a operação." });
   });
+  if (production && whatsapp.configured && options.startWorkers !== false) startReminderWorker(storage, whatsapp);
   return app;
 }
 
 function subscriptionResponse(subscription, plan, payments) {
   return { plan, status: subscription?.status || null, payerEmail: subscription?.payerEmail || null, nextPaymentDate: subscription?.nextPaymentDate || null, price: payments.price, configured: payments.configured, limits: plan === "pro" ? null : freeLimits };
 }
+
+function createBillEntries(input) {
+  const { installments, ...bill } = input;
+  if (installments === 1) return [{ ...bill, seriesType: "single" }];
+  const seriesId = randomUUID();
+  const totalCents = Math.round(bill.amount * 100);
+  const baseCents = Math.floor(totalCents / installments);
+  const remainder = totalCents % installments;
+  return Array.from({ length: installments }, (_, index) => ({
+    ...bill,
+    name: `${bill.name} (${index + 1}/${installments})`,
+    amount: (baseCents + (index < remainder ? 1 : 0)) / 100,
+    dueDate: addMonths(bill.dueDate, index),
+    status: "pending",
+    seriesId,
+    seriesType: "installment",
+    installmentNumber: index + 1,
+    installmentTotal: installments,
+  }));
+}
+
+function addMonths(value, months) {
+  const [year, month, day] = value.split("-").map(Number);
+  const target = new Date(year, month - 1 + months, 1, 12);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0, 12).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+}
+
+function serviceError(message, status) { const error = new Error(message); error.status = status; return error; }
 
 function sanitizeUser(user) {
   return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt };

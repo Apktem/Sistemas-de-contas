@@ -11,6 +11,8 @@ Aplicativo multiusuário para controle financeiro pessoal e empresarial.
 - Painel administrativo com usuários, totais e ativação de contas
 - Plano Grátis com limites e plano Pro recorrente de R$ 29,90 pelo Mercado Pago
 - Consulta e cancelamento de assinatura pelo próprio usuário
+- Tags, clonagem mensal e parcelamentos com previsão para os próximos seis meses
+- Alertas automáticos de vencimento pelo WhatsApp, com consentimento do usuário
 - Interface responsiva e instalável no celular
 
 ## Desenvolvimento
@@ -43,3 +45,15 @@ O e-mail definido em `ADMIN_EMAIL` recebe perfil administrativo ao criar a conta
 4. Salve e reimplante o aplicativo.
 
 O checkout cria uma assinatura mensal pela API de Preapproval. O retorno e o webhook consultam a assinatura diretamente no Mercado Pago antes de atualizar o plano do usuário. Nunca coloque o Access Token no frontend ou no GitHub.
+
+## WhatsApp
+
+Os alertas usam a API oficial WhatsApp Cloud da Meta. Configure na Hostinger `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE` e, se necessário, `WHATSAPP_GRAPH_VERSION`.
+
+Crie e aprove na Meta um template utilitário chamado `finance_due_reminder`, idioma `pt_BR`, com o corpo:
+
+```text
+Sua conta {{1}}, no valor de {{2}}, vence em {{3}} (daqui a {{4}} dias). Deseja marcar como paga? Acesse https://ricoxp.com.
+```
+
+Os parâmetros são, nesta ordem: nome da conta, valor, data de vencimento e dias restantes. O servidor verifica contas pendentes a cada seis horas e registra cada envio para não repetir o mesmo alerta no mesmo dia. O usuário precisa informar o número com DDI/DDD e autorizar explicitamente os alertas.

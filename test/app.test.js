@@ -4,6 +4,7 @@ import test from "node:test";
 import { isValidCpf } from "../auth.js";
 import { createApp } from "../backend.js";
 import { MemoryStorage } from "../storage.js";
+import { runReminderDispatch } from "../whatsapp.js";
 
 test("valida CPF", () => {
   assert.equal(isValidCpf("529.982.247-25"), true);
@@ -99,6 +100,39 @@ test("aplica limites gratis e libera recursos apos assinatura Pro", async (conte
   const synced = await post(base, "/api/subscription/sync", {}, account.cookie);
   assert.equal(synced.body.plan, "pro");
   assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 201);
+});
+
+test("cria parcelas futuras com tags e clona contas recorrentes", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const account = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
+  const installment = await post(base, "/api/bills", { name: "Notebook", amount: 100, dueDate: "2026-07-10", profile: "Empresa", category: "Cartao", status: "pending", tags: ["equipamento"], installments: 3 }, account.cookie);
+  assert.equal(installment.body.bills.length, 3);
+  assert.deepEqual(installment.body.bills.map((bill) => bill.dueDate), ["2026-07-10", "2026-08-10", "2026-09-10"]);
+  assert.equal(installment.body.bills.reduce((sum, bill) => sum + bill.amount, 0), 100);
+  assert.equal(installment.body.bills[0].tags[0], "equipamento");
+
+  const recurring = await post(base, "/api/bills", { name: "Aluguel", amount: 900, dueDate: "2026-07-31", profile: "Casa", category: "Moradia", status: "pending", tags: ["fixa"], installments: 1 }, account.cookie);
+  const cloned = await post(base, `/api/bills/${recurring.body.bills[0].id}/clone`, {}, account.cookie);
+  assert.equal(cloned.body.dueDate, "2026-08-31");
+  assert.equal(cloned.body.seriesType, "recurring");
+  assert.deepEqual(cloned.body.tags, ["fixa"]);
+});
+
+test("envia cada alerta de WhatsApp uma unica vez", async () => {
+  const storage = new MemoryStorage();
+  const user = await storage.createUser({ email: "alerta@example.com", lookup: "alerta@example.com", identifierType: "email", identifierLabel: "alerta@example.com", passwordHash: "hash", role: "user" });
+  await storage.upsertNotificationPreferences(user.id, { whatsappPhone: "5511999999999", whatsappEnabled: true, reminderDays: 2, consentAt: "2026-06-30T12:00:00Z" });
+  await storage.createBill(user.id, { name: "Internet", amount: 100, dueDate: "2026-07-02", profile: "Casa", category: "Servicos", status: "pending", tags: ["fixa"] });
+  let sends = 0;
+  const whatsapp = { configured: true, async sendReminder() { sends += 1; return "wamid-1"; } };
+  assert.deepEqual(await runReminderDispatch(storage, whatsapp, new Date("2026-06-30T12:00:00")), { sent: 1, failed: 0 });
+  assert.deepEqual(await runReminderDispatch(storage, whatsapp, new Date("2026-06-30T12:00:00")), { sent: 0, failed: 0 });
+  assert.equal(sends, 1);
 });
 
 async function post(base, path, body, cookie = "") {
