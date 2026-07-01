@@ -117,6 +117,12 @@ test("cria parcelas futuras com tags e clona contas recorrentes", async (context
   assert.equal(installment.body.bills.reduce((sum, bill) => sum + bill.amount, 0), 300);
   assert.equal(installment.body.bills[0].tags[0], "equipamento");
 
+  const fixed = await post(base, "/api/bills", { name: "Internet", amount: 120, dueDate: "2026-07-25", profile: "Casa", category: "Servicos", status: "pending", tags: [], installments: 1, recurring: true }, account.cookie);
+  assert.equal(fixed.status, 201);
+  assert.equal(fixed.body.bills.length, 12);
+  assert.deepEqual(fixed.body.bills.slice(0, 3).map((bill) => bill.dueDate), ["2026-07-25", "2026-08-25", "2026-09-25"]);
+  assert.ok(fixed.body.bills.every((bill) => bill.amount === 120 && bill.seriesType === "recurring"));
+
   const recurring = await post(base, "/api/bills", { name: "Aluguel", amount: 900, dueDate: "2026-07-31", profile: "Casa", category: "Moradia", status: "pending", tags: ["fixa"], installments: 1 }, account.cookie);
   const cloned = await post(base, `/api/bills/${recurring.body.bills[0].id}/clone`, {}, account.cookie);
   assert.equal(cloned.body.dueDate, "2026-08-31");
