@@ -9,7 +9,7 @@
   "background_color": "#f5f7f8",
   "theme_color": "#071f3f",
   "icons": [
-    { "src": "assets/ricoxp-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "assets/ricoxp-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/brand-icon-192", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/brand-icon-512", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
