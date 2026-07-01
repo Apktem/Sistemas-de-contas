@@ -182,8 +182,23 @@
             <div class="panel-title"><div><h2 id="subscriptionTitle">Seu plano</h2><p id="subscriptionDescription" class="muted"></p></div><span id="subscriptionBadge" class="badge"></span></div>
             <form id="subscriptionForm" class="subscription-form">
               <label>E-mail para cobrança<input id="billingEmail" type="email" autocomplete="email" required /></label>
-              <button id="subscribeButton" class="primary-button" type="submit">Assinar Pro</button>
+              <div class="payment-buttons">
+                <button id="subscribeButton" class="primary-button" type="submit">Assinar com cartão</button>
+                <button id="pixButton" class="ghost-button" type="button">Pagar mensalidade com Pix</button>
+              </div>
             </form>
+            <div id="pixCheckout" class="pix-checkout hidden">
+              <img id="pixQrCode" alt="QR Code para pagamento Pix" />
+              <div class="pix-content">
+                <h3>Pague R$ 29,90 com Pix</h3>
+                <p class="muted">Após a confirmação, o Plano Pro fica liberado por 30 dias.</p>
+                <label>Pix copia e cola<textarea id="pixCode" rows="3" readonly></textarea></label>
+                <div class="row-actions">
+                  <button id="copyPixCode" class="ghost-button" type="button">Copiar código Pix</button>
+                  <a id="openPixPayment" class="ghost-button hidden" target="_blank" rel="noopener">Abrir pagamento</a>
+                </div>
+              </div>
+            </div>
             <div class="row-actions subscription-actions">
               <button id="syncSubscription" class="ghost-button" type="button">Atualizar situação</button>
               <button id="cancelSubscription" class="ghost-button hidden" type="button">Cancelar assinatura</button>

@@ -10,7 +10,7 @@ import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { normalizeIdentifier } from "./auth.js";
-import { MercadoPagoSubscriptions, normalizeSubscription, subscriptionPlan } from "./payments.js";
+import { isPixSubscription, MercadoPagoSubscriptions, normalizePixPayment, normalizeSubscription, pixPaymentDetails, subscriptionPlan } from "./payments.js";
 import { createStorage } from "./storage.js";
 import { runPushDispatch, startPushWorker, WebPushService } from "./push.js";
 
@@ -239,22 +239,31 @@ export async function createApp(options = {}) {
   app.post("/api/subscription/checkout", authenticate, authLimiter, asyncRoute(async (req, res) => {
     const { payerEmail } = checkoutSchema.parse(req.body);
     const current = await storage.getSubscription(req.user.id);
-    if (current?.status === "authorized") return res.status(409).json({ error: "Sua assinatura Pro ja esta ativa." });
+    if (subscriptionPlan(current, req.user.role) === "pro") return res.status(409).json({ error: "Sua assinatura Pro ja esta ativa." });
     const remote = await payments.create(req.user.id, payerEmail.toLowerCase());
     const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
     return res.status(201).json({ checkoutUrl: remote.init_point, subscription: subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments) });
   }));
+  app.post("/api/subscription/pix", authenticate, authLimiter, asyncRoute(async (req, res) => {
+    const { payerEmail } = checkoutSchema.parse(req.body);
+    const current = await storage.getSubscription(req.user.id);
+    if (subscriptionPlan(current, req.user.role) === "pro") return res.status(409).json({ error: "Seu plano Pro ja esta ativo." });
+    const remote = await payments.createPix(req.user.id, payerEmail.toLowerCase(), randomUUID());
+    const subscription = await storage.upsertSubscription(normalizePixPayment(remote));
+    return res.status(201).json({ subscription: subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments, pixPaymentDetails(remote)) });
+  }));
   app.post("/api/subscription/sync", authenticate, asyncRoute(async (req, res) => {
     const current = await storage.getSubscription(req.user.id);
     if (!current?.providerId) return res.json(subscriptionResponse(null, subscriptionPlan(null, req.user.role), payments));
-    const remote = await payments.get(current.providerId);
+    const remote = isPixSubscription(current) ? await payments.getPayment(current.providerId) : await payments.get(current.providerId);
     if (remote.external_reference !== req.user.id) return res.status(403).json({ error: "Assinatura invalida." });
-    const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
-    return res.json(subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments));
+    const subscription = await storage.upsertSubscription(isPixSubscription(current) ? normalizePixPayment(remote) : normalizeSubscription(remote));
+    return res.json(subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments, isPixSubscription(subscription) ? pixPaymentDetails(remote) : null));
   }));
   app.post("/api/subscription/cancel", authenticate, asyncRoute(async (req, res) => {
     const current = await storage.getSubscription(req.user.id);
     if (!current?.providerId) return res.status(404).json({ error: "Assinatura nao encontrada." });
+    if (isPixSubscription(current)) return res.status(400).json({ error: "O Pix nao possui renovacao automatica para cancelar." });
     const remote = await payments.cancel(current.providerId);
     const subscription = await storage.upsertSubscription(normalizeSubscription(remote));
     return res.json(subscriptionResponse(subscription, subscriptionPlan(subscription, req.user.role), payments));
@@ -264,9 +273,11 @@ export async function createApp(options = {}) {
     if (!providerId) return res.status(200).json({ received: true });
     const current = await storage.getSubscriptionByProviderId(providerId);
     if (!current) return res.status(200).json({ received: true });
-    const remote = await payments.get(providerId);
+    const type = String(req.query.type || req.query.topic || req.body?.type || "");
+    const pix = type === "payment" || isPixSubscription(current);
+    const remote = pix ? await payments.getPayment(providerId) : await payments.get(providerId);
     const user = remote.external_reference === current.userId ? await storage.getUser(current.userId) : null;
-    if (user) await storage.upsertSubscription(normalizeSubscription(remote));
+    if (user) await storage.upsertSubscription(pix ? normalizePixPayment(remote) : normalizeSubscription(remote));
     return res.status(200).json({ received: true });
   }));
 
@@ -325,8 +336,8 @@ export async function createApp(options = {}) {
   return app;
 }
 
-function subscriptionResponse(subscription, plan, payments) {
-  return { plan, status: subscription?.status || null, payerEmail: subscription?.payerEmail || null, nextPaymentDate: subscription?.nextPaymentDate || null, price: payments.price, configured: payments.configured, limits: plan === "pro" ? null : freeLimits };
+function subscriptionResponse(subscription, plan, payments, pix = null) {
+  return { plan, status: subscription?.status || null, billingType: isPixSubscription(subscription) ? "pix" : subscription?.status ? "card" : null, payerEmail: subscription?.payerEmail || null, nextPaymentDate: subscription?.nextPaymentDate || null, price: payments.price, configured: payments.configured, pix, limits: plan === "pro" ? null : freeLimits };
 }
 
 function createBillEntries(input) {
