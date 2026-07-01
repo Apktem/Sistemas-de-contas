@@ -27,7 +27,10 @@ const billSchema = z.object({
   status: z.enum(["pending", "paid"]),
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
 });
-const billCreateSchema = billSchema.extend({ installments: z.coerce.number().int().min(1).max(60).default(1) });
+const billCreateSchema = billSchema.extend({
+  installments: z.coerce.number().int().min(1).max(60).default(1),
+  recurring: z.boolean().default(false),
+});
 const cardSchema = z.object({
   name: z.string().trim().min(2).max(120),
   limit: z.coerce.number().positive().max(999999999.99),
@@ -94,6 +97,24 @@ export async function createApp(options = {}) {
       if (count > freeLimits.billsPerMonth) throw serviceError(`O plano gratis permite ${freeLimits.billsPerMonth} contas por mes. Assine o Pro para continuar.`, 402);
     }
   };
+  const listDataWithRecurringHorizon = async (user) => {
+    const data = await storage.listData(user.id);
+    const recurring = data.bills.filter((bill) => bill.seriesType === "recurring" && bill.seriesId);
+    const targetDate = addMonths(localDate(), 11);
+    const entries = [];
+    for (const seriesId of new Set(recurring.map((bill) => bill.seriesId))) {
+      const series = recurring.filter((bill) => bill.seriesId === seriesId).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      const first = series[0];
+      const latest = series[series.length - 1];
+      for (let index = monthDifference(first.dueDate, latest.dueDate) + 1, dueDate = addMonths(first.dueDate, index); dueDate <= targetDate; index += 1, dueDate = addMonths(first.dueDate, index)) {
+        entries.push({ ...latest, id: undefined, dueDate, status: "pending" });
+      }
+    }
+    if (!entries.length) return data;
+    await ensureBillCapacity(user, entries);
+    await storage.createBills(user.id, entries);
+    return storage.listData(user.id);
+  };
 
   app.post("/api/register", authLimiter, asyncRoute(async (req, res) => {
     const input = registerSchema.parse(req.body);
@@ -129,7 +150,7 @@ export async function createApp(options = {}) {
     res.status(204).end();
   });
   app.get("/api/session", authenticate, (req, res) => res.json({ user: req.user }));
-  app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await storage.listData(req.user.id))));
+  app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await listDataWithRecurringHorizon(req.user))));
   app.get("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
     const access = await getAccess(req.user);
     return res.json({ ...await storage.getNotificationPreferences(req.user.id), configured: push.configured, publicKey: push.configured ? push.publicKey : null, available: access.plan === "pro" });
@@ -156,6 +177,7 @@ export async function createApp(options = {}) {
 
   app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
     const input = billCreateSchema.parse(req.body);
+    if (input.recurring && input.installments > 1) return res.status(400).json({ error: "Conta fixa mensal não deve ter parcelas." });
     const access = await getAccess(req.user);
     if (input.installments > 1 && access.plan !== "pro") return res.status(402).json({ error: "Contas parceladas são exclusivas do plano Pro." });
     const entries = createBillEntries(input);
@@ -176,7 +198,7 @@ export async function createApp(options = {}) {
     if (access.plan !== "pro") return res.status(402).json({ error: "Clonagem mensal é exclusiva do plano Pro." });
     const existing = await storage.getBill(req.user.id, req.params.id);
     if (!existing) return res.status(404).json({ error: "Conta não encontrada." });
-    if (existing.seriesType === "installment") return res.status(400).json({ error: "Parcelas futuras já foram criadas automaticamente." });
+    if (existing.seriesType !== "single") return res.status(400).json({ error: "Esta conta já possui repetição automática." });
     const cloned = { ...existing, id: undefined, dueDate: addMonths(existing.dueDate, 1), status: "pending", seriesId: existing.seriesId || randomUUID(), seriesType: "recurring", installmentNumber: null, installmentTotal: null };
     await ensureBillCapacity(req.user, [cloned]);
     return res.status(201).json(await storage.createBill(req.user.id, cloned));
@@ -297,7 +319,19 @@ function subscriptionResponse(subscription, plan, payments) {
 }
 
 function createBillEntries(input) {
-  const { installments, ...bill } = input;
+  const { installments, recurring, ...bill } = input;
+  if (recurring) {
+    const seriesId = randomUUID();
+    return Array.from({ length: 12 }, (_, index) => ({
+      ...bill,
+      dueDate: addMonths(bill.dueDate, index),
+      status: index === 0 ? bill.status : "pending",
+      seriesId,
+      seriesType: "recurring",
+      installmentNumber: null,
+      installmentTotal: null,
+    }));
+  }
   if (installments === 1) return [{ ...bill, seriesType: "single" }];
   const seriesId = randomUUID();
   return Array.from({ length: installments }, (_, index) => ({
@@ -318,6 +352,17 @@ function addMonths(value, months) {
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0, 12).getDate();
   target.setDate(Math.min(day, lastDay));
   return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+}
+
+function localDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function monthDifference(from, to) {
+  const [fromYear, fromMonth] = from.split("-").map(Number);
+  const [toYear, toMonth] = to.split("-").map(Number);
+  return (toYear - fromYear) * 12 + toMonth - fromMonth;
 }
 
 function serviceError(message, status) { const error = new Error(message); error.status = status; return error; }

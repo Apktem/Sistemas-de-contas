@@ -242,8 +242,9 @@ function renderTable() {
   const bills = getFilteredBills();
   $("#billTable").innerHTML = bills.length ? bills.map((bill) => {
     const situation = billSituation(bill);
-    const tags = bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : '<span class="muted">-</span>';
-    const cloneButton = bill.seriesType === "installment" ? "" : `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>`;
+    const fixedTag = bill.seriesType === "recurring" ? '<span class="tag">Fixa mensal</span>' : "";
+    const tags = `${fixedTag}${bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : fixedTag ? "" : '<span class="muted">-</span>'}`;
+    const cloneButton = bill.seriesType === "single" ? `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>` : "";
     return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
   }).join("") : '<tr><td colspan="7">Nenhuma conta cadastrada para este período.</td></tr>';
 }
@@ -264,6 +265,8 @@ function resetBillForm() {
   $("#billDueDate").value = `${els.monthFilter.value}-10`;
   $("#billInstallments").value = "1";
   $("#billInstallments").disabled = false;
+  $("#billRecurring").checked = false;
+  $("#billRecurring").disabled = false;
   els.cancelEditButton.classList.add("hidden");
 }
 
@@ -362,11 +365,15 @@ els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); })
 els.profileFilter.addEventListener("change", render);
 $("#exportButton").addEventListener("click", exportCsv);
 els.cancelEditButton.addEventListener("click", resetBillForm);
+$("#billRecurring").addEventListener("change", () => {
+  if ($("#billRecurring").checked) $("#billInstallments").value = "1";
+  $("#billInstallments").disabled = $("#billRecurring").checked;
+});
 
 els.billForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = $("#billId").value;
-  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value) };
+  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value), recurring: $("#billRecurring").checked };
   try {
     await api(id ? `/api/bills/${id}` : "/api/bills", { method: id ? "PUT" : "POST", body: JSON.stringify(bill) });
     await loadData(); resetBillForm(); setMessage(els.appMessage, "Conta salva.", true);
@@ -379,7 +386,7 @@ $("#billTable").addEventListener("click", async (event) => {
   const bill = state.bills.find((item) => item.id === button.dataset.id);
   if (!bill) return;
   if (button.dataset.action === "edit") {
-    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; $("#billTags").value = (bill.tags || []).join(", "); $("#billInstallments").value = "1"; $("#billInstallments").disabled = true; els.cancelEditButton.classList.remove("hidden"); return;
+    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; $("#billTags").value = (bill.tags || []).join(", "); $("#billInstallments").value = "1"; $("#billInstallments").disabled = true; $("#billRecurring").checked = bill.seriesType === "recurring"; $("#billRecurring").disabled = true; els.cancelEditButton.classList.remove("hidden"); return;
   }
   try {
     if (button.dataset.action === "delete") await api(`/api/bills/${bill.id}`, { method: "DELETE" });

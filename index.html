@@ -125,6 +125,7 @@
               <label>Status<select id="billStatus"><option value="pending">A vencer</option><option value="paid">Pago</option></select></label>
               <label>Tags<input id="billTags" type="text" maxlength="180" placeholder="Ex: fixa, casa" /></label>
               <label>Parcelas<input id="billInstallments" type="number" min="1" max="60" value="1" required /></label>
+              <label class="check-label"><input id="billRecurring" type="checkbox" /> Conta fixa mensal</label>
               <button class="primary-button" type="submit">Salvar conta</button>
               <button id="cancelEditButton" class="ghost-button hidden" type="button">Cancelar edição</button>
             </form>
