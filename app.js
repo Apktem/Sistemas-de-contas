@@ -372,12 +372,26 @@ $("#billRecurring").addEventListener("change", () => {
 
 els.billForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (els.billForm.dataset.submitting === "true") return;
   const id = $("#billId").value;
   const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value), recurring: $("#billRecurring").checked };
+  const submitButton = els.billForm.querySelector('button[type="submit"]');
+  const originalLabel = submitButton.textContent;
+  els.billForm.dataset.submitting = "true";
+  submitButton.disabled = true;
+  submitButton.textContent = "Salvando...";
   try {
-    await api(id ? `/api/bills/${id}` : "/api/bills", { method: id ? "PUT" : "POST", body: JSON.stringify(bill) });
-    await loadData(); resetBillForm(); setMessage(els.appMessage, "Conta salva.", true);
-  } catch (error) { setMessage(els.appMessage, error.message); }
+    const result = await api(id ? `/api/bills/${id}` : "/api/bills", { method: id ? "PUT" : "POST", body: JSON.stringify(bill) });
+    const created = result?.bills?.length || 1;
+    const message = id ? "Conta atualizada." : bill.recurring ? "Conta fixa salva e próximos 12 meses criados." : created > 1 ? `${created} parcelas criadas. Troque o Mês exibido para consultar as próximas.` : "Conta salva.";
+    await loadData(); resetBillForm(); setMessage(els.appMessage, message, true);
+  } catch (error) {
+    setMessage(els.appMessage, error.message);
+  } finally {
+    els.billForm.dataset.submitting = "false";
+    submitButton.disabled = false;
+    submitButton.textContent = originalLabel;
+  }
 });
 
 $("#billTable").addEventListener("click", async (event) => {
