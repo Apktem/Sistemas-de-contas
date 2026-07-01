@@ -267,6 +267,11 @@ export async function createApp(options = {}) {
       res.sendFile(path.join(root, "assets", file));
     });
   });
+  app.get("/app-manifest", (_req, res) => {
+    res.type("application/manifest+json");
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.join(root, "manifest.webmanifest"));
+  });
   const distRoot = path.join(root, "dist");
   const hasBuild = existsSync(path.join(distRoot, "index.html"));
   if (hasBuild) {
