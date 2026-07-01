@@ -300,13 +300,9 @@ function createBillEntries(input) {
   const { installments, ...bill } = input;
   if (installments === 1) return [{ ...bill, seriesType: "single" }];
   const seriesId = randomUUID();
-  const totalCents = Math.round(bill.amount * 100);
-  const baseCents = Math.floor(totalCents / installments);
-  const remainder = totalCents % installments;
   return Array.from({ length: installments }, (_, index) => ({
     ...bill,
     name: `${bill.name} (${index + 1}/${installments})`,
-    amount: (baseCents + (index < remainder ? 1 : 0)) / 100,
     dueDate: addMonths(bill.dueDate, index),
     status: "pending",
     seriesId,
