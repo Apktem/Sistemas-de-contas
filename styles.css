@@ -50,6 +50,8 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(17, 94
 .workspace-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 8px; }
 .workspace-button { min-height: 42px; border: 0; border-radius: 6px; color: #d7e6e3; background: transparent; font-weight: 700; }
 .workspace-button.active { color: #0e4743; background: #eaf7f3; }
+.workspace-button.locked { color: #91aaa5; }
+.workspace-plan { margin-left: 4px; padding: 2px 5px; border-radius: 4px; color: #0e4743; background: #b7e7de; font-size: .66rem; text-transform: uppercase; }
 .nav-list { display: grid; gap: 8px; }
 .nav-item { width: 100%; text-align: left; color: #d7e6e3; background: transparent; }
 .nav-item.active { background: #eaf7f3; color: #0e4743; }
