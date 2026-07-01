@@ -1,7 +1,7 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null, notificationPreferences: null };
 let deferredInstallPrompt = null;
-const installDismissedKey = "ricoxp-install-dismissed-at";
+const installDismissedKey = "ricoxp-install-dismissed-at-v2";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 const els = {
@@ -30,6 +30,7 @@ function showAuth() {
   state.user = null;
   els.loginScreen.classList.remove("hidden");
   els.appScreen.classList.add("hidden");
+  setTimeout(showInstallPrompt, 900);
 }
 
 async function enterApp(user) {
@@ -56,11 +57,11 @@ function isMobileScreen() { return window.matchMedia("(max-width: 820px)").match
 function installPromptRecentlyDismissed() {
   try {
     const dismissedAt = Number(localStorage.getItem(installDismissedKey) || 0);
-    return dismissedAt && Date.now() - dismissedAt < 30 * 24 * 60 * 60 * 1000;
+    return dismissedAt && Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000;
   } catch { return false; }
 }
 function showInstallPrompt() {
-  if (!state.user || isStandalone() || !isMobileScreen() || installPromptRecentlyDismissed()) return;
+  if (isStandalone() || !isMobileScreen() || installPromptRecentlyDismissed()) return;
   if (!deferredInstallPrompt && !isIos()) return;
   $("#installAppButton").textContent = isIos() ? "Como instalar" : "Instalar aplicativo";
   $("#installAppButton").classList.remove("hidden");
