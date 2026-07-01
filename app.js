@@ -62,14 +62,13 @@ function installPromptRecentlyDismissed() {
 }
 function showInstallPrompt() {
   if (isStandalone() || !isMobileScreen() || installPromptRecentlyDismissed()) return;
-  if (!deferredInstallPrompt && !isIos()) return;
-  $("#installAppButton").textContent = isIos() ? "Como instalar" : "Instalar aplicativo";
+  $("#installAppButton").textContent = deferredInstallPrompt ? "Instalar aplicativo" : "Como instalar";
   $("#installAppButton").classList.remove("hidden");
   $("#installPrompt").classList.remove("hidden");
 }
 function hideInstallPrompt(remember = false) {
   $("#installPrompt").classList.add("hidden");
-  $("#iosInstallSteps").classList.add("hidden");
+  $("#manualInstallSteps").classList.add("hidden");
   if (remember) try { localStorage.setItem(installDismissedKey, String(Date.now())); } catch {}
 }
 
@@ -345,12 +344,14 @@ els.registerForm.addEventListener("submit", async (event) => {
 $("#logoutButton").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }).catch(() => {}); showAuth(); });
 $("#dismissInstallButton").addEventListener("click", () => hideInstallPrompt(true));
 $("#installAppButton").addEventListener("click", async () => {
-  if (isIos()) {
-    $("#iosInstallSteps").classList.remove("hidden");
+  if (!deferredInstallPrompt) {
+    $("#manualInstallSteps").innerHTML = isIos()
+      ? "<li>Toque em <strong>Compartilhar</strong> no Safari.</li><li>Escolha <strong>Adicionar à Tela de Início</strong>.</li><li>Confirme em <strong>Adicionar</strong>.</li>"
+      : "<li>Abra o menu <strong>⋮</strong> do navegador.</li><li>Escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</li><li>Confirme em <strong>Instalar</strong>.</li>";
+    $("#manualInstallSteps").classList.remove("hidden");
     $("#installAppButton").classList.add("hidden");
     return;
   }
-  if (!deferredInstallPrompt) return;
   await deferredInstallPrompt.prompt();
   const choice = await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
