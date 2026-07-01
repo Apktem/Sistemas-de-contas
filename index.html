@@ -78,6 +78,10 @@
     <main id="appScreen" class="app-shell hidden">
       <aside class="sidebar">
         <div class="sidebar-head"><div><p class="eyebrow">Financeiro</p><h2>Controle mensal</h2></div><span id="userBadge" class="user-badge"></span></div>
+        <div class="workspace-switch" aria-label="Escolha a área financeira">
+          <button class="workspace-button active" data-workspace="Casa" type="button">Casa</button>
+          <button class="workspace-button" data-workspace="Empresa" type="button">Empresa</button>
+        </div>
         <nav class="nav-list" aria-label="Áreas">
           <button class="nav-item active" data-view="dashboard" type="button">Painel</button>
           <button class="nav-item" data-view="bills" type="button">Contas</button>
@@ -94,7 +98,8 @@
           <div><p id="todayLabel" class="eyebrow"></p><h1 id="pageTitle">Painel</h1></div>
           <div id="financeFilters" class="filters">
             <label>Mês exibido<input id="monthFilter" type="month" /></label>
-            <label>Perfil<select id="profileFilter"><option value="all">Casa + Empresa</option><option value="Casa">Casa</option><option value="Empresa">Empresa</option></select></label>
+            <div class="workspace-context"><span>Área</span><strong id="workspaceContext">Casa</strong></div>
+            <input id="profileFilter" type="hidden" value="Casa" />
           </div>
         </header>
         <p id="appMessage" class="form-message" aria-live="polite"></p>
@@ -120,7 +125,7 @@
               <label>Nome<input id="billName" type="text" placeholder="Ex: Aluguel" required /></label>
               <label>Valor de cada parcela<input id="billAmount" type="number" min="0.01" step="0.01" required /></label>
               <label>Vencimento<input id="billDueDate" type="date" required /></label>
-              <label>Perfil<select id="billProfile"><option>Casa</option><option>Empresa</option></select></label>
+              <input id="billProfile" type="hidden" value="Casa" />
               <label>Categoria<select id="billCategory"><option>Moradia</option><option>Servicos</option><option>Cartao</option><option>Impostos</option><option>Saude</option><option>Equipe</option><option>Outros</option></select></label>
               <label>Status<select id="billStatus"><option value="pending">A vencer</option><option value="paid">Pago</option></select></label>
               <label>Tags<input id="billTags" type="text" maxlength="180" placeholder="Ex: fixa, casa" /></label>
@@ -131,7 +136,7 @@
             </form>
           </section>
           <section class="panel"><div class="panel-title"><h2>Contas do mês</h2><button id="exportButton" class="ghost-button" type="button">Exportar CSV</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Tags</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead><tbody id="billTable"></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Tags</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead><tbody id="billTable"></tbody></table></div>
           </section>
         </section>
 
@@ -142,7 +147,7 @@
               <label>Limite<input id="cardLimit" type="number" min="0.01" step="0.01" required /></label>
               <label>Fechamento<input id="cardCloseDay" type="number" min="1" max="31" required /></label>
               <label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" required /></label>
-              <label>Perfil<select id="cardProfile"><option>Casa</option><option>Empresa</option></select></label>
+              <input id="cardProfile" type="hidden" value="Casa" />
               <button class="primary-button" type="submit">Salvar cartão</button>
             </form>
           </section>

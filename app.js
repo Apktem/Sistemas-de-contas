@@ -141,7 +141,7 @@ function renderSubscription() {
 function getFilteredBills() {
   const month = els.monthFilter.value;
   const profile = els.profileFilter.value;
-  return state.bills.filter((bill) => bill.dueDate.startsWith(month)).filter((bill) => profile === "all" || bill.profile === profile).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return state.bills.filter((bill) => bill.dueDate.startsWith(month) && bill.profile === profile).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
 function billSituation(bill) {
@@ -223,7 +223,7 @@ function drawRows(selector, bills, emptyText) {
   container.innerHTML = bills.map((bill) => {
     const situation = billSituation(bill);
     const text = situation === "overdue" ? `Venceu há ${Math.abs(bill.days)} dia(s)` : `Vence em ${bill.days} dia(s)`;
-    return `<div class="list-row"><div><strong>${escapeHtml(bill.name)}</strong><small>${bill.profile} · ${formatDate(bill.dueDate)} · ${money.format(Number(bill.amount))}</small></div><span class="badge ${situation}">${text}</span></div>`;
+    return `<div class="list-row"><div><strong>${escapeHtml(bill.name)}</strong><small>${formatDate(bill.dueDate)} · ${money.format(Number(bill.amount))}</small></div><span class="badge ${situation}">${text}</span></div>`;
   }).join("");
 }
 
@@ -231,7 +231,7 @@ function renderForecast() {
   const profile = els.profileFilter.value;
   const months = Array.from({ length: 6 }, (_, index) => {
     const key = monthKeyFromOffset(els.monthFilter.value, index + 1);
-    const bills = state.bills.filter((bill) => bill.dueDate.startsWith(key) && (profile === "all" || bill.profile === profile));
+    const bills = state.bills.filter((bill) => bill.dueDate.startsWith(key) && bill.profile === profile);
     return { key, count: bills.length, total: bills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
   });
   const max = Math.max(...months.map((item) => item.total), 1);
@@ -245,17 +245,17 @@ function renderTable() {
     const fixedTag = bill.seriesType === "recurring" ? '<span class="tag">Fixa mensal</span>' : "";
     const tags = `${fixedTag}${bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : fixedTag ? "" : '<span class="muted">-</span>'}`;
     const cloneButton = bill.seriesType === "single" ? `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>` : "";
-    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
-  }).join("") : '<tr><td colspan="7">Nenhuma conta cadastrada para este período.</td></tr>';
+    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
+  }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
 function renderCards() {
   const profile = els.profileFilter.value;
-  const cards = state.cards.filter((card) => profile === "all" || card.profile === profile);
+  const cards = state.cards.filter((card) => card.profile === profile);
   $("#cardList").innerHTML = cards.length ? cards.map((card) => {
     const used = getFilteredBills().filter((bill) => bill.category === "Cartao" && bill.name.toLowerCase().includes(card.name.split(" ")[0].toLowerCase())).reduce((sum, bill) => sum + Number(bill.amount), 0);
     const percent = Math.min(100, Math.round((used / Number(card.limit || 1)) * 100));
-    return `<article class="card-item"><div><strong>${escapeHtml(card.name)}</strong><p class="muted">${card.profile} · vence dia ${card.dueDay} · fecha dia ${card.closeDay}</p></div><div class="progress"><span style="width:${percent}%"></span></div><small>${money.format(used)} usado de ${money.format(Number(card.limit))}</small><button class="small-button" data-card-delete="${card.id}" type="button">Excluir cartão</button></article>`;
+    return `<article class="card-item"><div><strong>${escapeHtml(card.name)}</strong><p class="muted">Vence dia ${card.dueDay} · fecha dia ${card.closeDay}</p></div><div class="progress"><span style="width:${percent}%"></span></div><small>${money.format(used)} usado de ${money.format(Number(card.limit))}</small><button class="small-button" data-card-delete="${card.id}" type="button">Excluir cartão</button></article>`;
   }).join("") : '<section class="panel"><p class="muted">Nenhum cartão cadastrado.</p></section>';
 }
 
@@ -267,7 +267,22 @@ function resetBillForm() {
   $("#billInstallments").disabled = false;
   $("#billRecurring").checked = false;
   $("#billRecurring").disabled = false;
+  $("#billProfile").value = els.profileFilter.value;
   els.cancelEditButton.classList.add("hidden");
+}
+
+function setWorkspace(profile, remember = true) {
+  const selected = profile === "Empresa" ? "Empresa" : "Casa";
+  els.profileFilter.value = selected;
+  $("#billProfile").value = selected;
+  $("#cardProfile").value = selected;
+  $("#workspaceContext").textContent = selected;
+  $$('[data-workspace]').forEach((button) => button.classList.toggle("active", button.dataset.workspace === selected));
+  resetBillForm();
+  els.cardForm.reset();
+  $("#cardProfile").value = selected;
+  if (remember) try { localStorage.setItem("ricoxp-workspace", selected); } catch {}
+  render();
 }
 
 function switchView(view, title) {
@@ -362,7 +377,7 @@ $("#installAppButton").addEventListener("click", async () => {
 });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
-els.profileFilter.addEventListener("change", render);
+$$('[data-workspace]').forEach((button) => button.addEventListener("click", () => setWorkspace(button.dataset.workspace)));
 $("#exportButton").addEventListener("click", exportCsv);
 els.cancelEditButton.addEventListener("click", resetBillForm);
 $("#billRecurring").addEventListener("change", () => {
@@ -412,7 +427,7 @@ $("#billTable").addEventListener("click", async (event) => {
 
 els.cardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const card = { name: $("#cardName").value.trim(), limit: Number($("#cardLimit").value), closeDay: Number($("#cardCloseDay").value), dueDay: Number($("#cardDueDay").value), profile: $("#cardProfile").value };
+  const card = { name: $("#cardName").value.trim(), limit: Number($("#cardLimit").value), closeDay: Number($("#cardCloseDay").value), dueDay: Number($("#cardDueDay").value), profile: els.profileFilter.value };
   try { await api("/api/cards", { method: "POST", body: JSON.stringify(card) }); await loadData(); els.cardForm.reset(); setMessage(els.appMessage, "Cartão salvo.", true); } catch (error) { setMessage(els.appMessage, error.message); }
 });
 
@@ -491,6 +506,8 @@ $("#adminUserTable").addEventListener("click", async (event) => {
 
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-resetBillForm();
+let initialWorkspace = "Casa";
+try { initialWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
+setWorkspace(initialWorkspace, false);
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});
