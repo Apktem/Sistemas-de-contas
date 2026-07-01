@@ -1,15 +1,16 @@
 {
   "name": "RicoXP Gestão Financeira",
   "short_name": "RicoXP",
+  "id": "/",
   "description": "Controle financeiro pessoal e empresarial para contas, cartões, vencimentos e parcelamentos.",
   "lang": "pt-BR",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f5f7f8",
   "theme_color": "#071f3f",
   "icons": [
-    { "src": "/brand-icon-192", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/brand-icon-512", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/brand-icon-192?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/brand-icon-512?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
