@@ -123,7 +123,7 @@ function renderSubscription() {
   const isPro = subscription.plan === "pro";
   const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada" };
   $("#subscriptionTitle").textContent = isPro ? "Plano Pro" : "Plano Grátis";
-  $("#subscriptionDescription").textContent = isPro ? `Recursos ilimitados${subscription.nextPaymentDate ? ` · próxima cobrança em ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Faça o upgrade para cadastrar contas e cartões sem limites.";
+  $("#subscriptionDescription").textContent = isPro ? `Casa e Empresa com recursos ilimitados${subscription.nextPaymentDate ? ` · próxima cobrança em ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Área Casa com até 10 contas por mês, 1 cartão, painel e lembretes.";
   $("#subscriptionBadge").textContent = labels[subscription.status] || (isPro ? "Ativa" : "Grátis");
   $("#subscriptionBadge").className = `badge ${isPro ? "active" : subscription.status === "pending" ? "pending" : "inactive"}`;
   $("#billingEmail").value = subscription.payerEmail || (state.user.identifierType === "email" ? state.user.identifierLabel : "");
@@ -136,6 +136,14 @@ function renderSubscription() {
   $(".plan-option.featured").classList.toggle("current", isPro);
   $(".plan-option:first-child .plan-label").textContent = isPro ? "Plano disponível" : "Plano atual";
   $(".plan-option.featured .plan-label").textContent = isPro ? "Plano atual" : "Mais completo";
+  const companyButton = $('[data-workspace="Empresa"]');
+  companyButton.classList.toggle("locked", !isPro);
+  if (!isPro && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
+  if (isPro) {
+    let savedWorkspace = "Casa";
+    try { savedWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
+    if (savedWorkspace === "Empresa" && els.profileFilter.value !== "Empresa") setWorkspace("Empresa", false);
+  }
 }
 
 function getFilteredBills() {
@@ -285,6 +293,16 @@ function setWorkspace(profile, remember = true) {
   render();
 }
 
+function selectWorkspace(profile) {
+  if (profile === "Empresa" && state.subscription?.plan !== "pro") {
+    switchView("subscription", "Assinatura");
+    setMessage(els.appMessage, "A área Empresa está disponível no plano Pro.");
+    return;
+  }
+  setMessage(els.appMessage);
+  setWorkspace(profile);
+}
+
 function switchView(view, title) {
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
   $$(".view").forEach((item) => item.classList.remove("active-view"));
@@ -377,7 +395,7 @@ $("#installAppButton").addEventListener("click", async () => {
 });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
-$$('[data-workspace]').forEach((button) => button.addEventListener("click", () => setWorkspace(button.dataset.workspace)));
+$$('[data-workspace]').forEach((button) => button.addEventListener("click", () => selectWorkspace(button.dataset.workspace)));
 $("#exportButton").addEventListener("click", exportCsv);
 els.cancelEditButton.addEventListener("click", resetBillForm);
 $("#billRecurring").addEventListener("change", () => {
@@ -486,7 +504,7 @@ $("#subscriptionForm").addEventListener("submit", async (event) => {
   } catch (error) { setMessage(els.appMessage, error.message); }
 });
 $("#syncSubscription").addEventListener("click", async () => {
-  try { await loadSubscription(true); setMessage(els.appMessage, "Situação da assinatura atualizada.", true); } catch (error) { setMessage(els.appMessage, error.message); }
+  try { await loadSubscription(true); await loadData(); setMessage(els.appMessage, "Situação da assinatura atualizada.", true); } catch (error) { setMessage(els.appMessage, error.message); }
 });
 $("#cancelSubscription").addEventListener("click", async () => {
   if (!confirm("Cancelar a renovação do plano Pro?")) return;
@@ -506,8 +524,6 @@ $("#adminUserTable").addEventListener("click", async (event) => {
 
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-let initialWorkspace = "Casa";
-try { initialWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
-setWorkspace(initialWorkspace, false);
+setWorkspace("Casa", false);
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});

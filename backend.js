@@ -86,11 +86,16 @@ export async function createApp(options = {}) {
     const subscription = await storage.getSubscription(user.id);
     return { subscription, plan: subscriptionPlan(subscription, user.role) };
   };
+  const ensureProfileAccess = async (user, profile) => {
+    const access = await getAccess(user);
+    if (profile === "Empresa" && access.plan !== "pro") throw serviceError("A área Empresa é exclusiva do plano Pro.", 402);
+    return access;
+  };
   const ensureBillCapacity = async (user, entries, excludedId = null) => {
     const access = await getAccess(user);
     if (access.plan === "pro") return;
     const data = await storage.listData(user.id);
-    const existing = data.bills.filter((item) => item.id !== excludedId);
+    const existing = data.bills.filter((item) => item.id !== excludedId && item.profile === "Casa");
     const months = new Set(entries.map((item) => item.dueDate.slice(0, 7)));
     for (const month of months) {
       const count = existing.filter((item) => item.dueDate.startsWith(month)).length + entries.filter((item) => item.dueDate.startsWith(month)).length;
@@ -99,7 +104,8 @@ export async function createApp(options = {}) {
   };
   const listDataWithRecurringHorizon = async (user) => {
     const data = await storage.listData(user.id);
-    const recurring = data.bills.filter((bill) => bill.seriesType === "recurring" && bill.seriesId);
+    const access = await getAccess(user);
+    const recurring = data.bills.filter((bill) => bill.seriesType === "recurring" && bill.seriesId && (access.plan === "pro" || bill.profile === "Casa"));
     const targetDate = addMonths(localDate(), 11);
     const entries = [];
     for (const seriesId of new Set(recurring.map((bill) => bill.seriesId))) {
@@ -150,7 +156,11 @@ export async function createApp(options = {}) {
     res.status(204).end();
   });
   app.get("/api/session", authenticate, (req, res) => res.json({ user: req.user }));
-  app.get("/api/data", authenticate, asyncRoute(async (req, res) => res.json(await listDataWithRecurringHorizon(req.user))));
+  app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
+    const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
+    if (access.plan === "pro") return res.json(data);
+    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa") });
+  }));
   app.get("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
     const access = await getAccess(req.user);
     return res.json({ ...await storage.getNotificationPreferences(req.user.id), configured: push.configured, publicKey: push.configured ? push.publicKey : null, available: access.plan === "pro" });
@@ -178,7 +188,7 @@ export async function createApp(options = {}) {
   app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
     const input = billCreateSchema.parse(req.body);
     if (input.recurring && input.installments > 1) return res.status(400).json({ error: "Conta fixa mensal não deve ter parcelas." });
-    const access = await getAccess(req.user);
+    const access = await ensureProfileAccess(req.user, input.profile);
     if (input.installments > 1 && access.plan !== "pro") return res.status(402).json({ error: "Contas parceladas são exclusivas do plano Pro." });
     const entries = createBillEntries(input);
     await ensureBillCapacity(req.user, entries);
@@ -188,6 +198,7 @@ export async function createApp(options = {}) {
     const existing = await storage.getBill(req.user.id, req.params.id);
     if (!existing) return res.status(404).json({ error: "Conta não encontrada." });
     const input = billSchema.parse(req.body);
+    await ensureProfileAccess(req.user, input.profile);
     const entry = { ...input, seriesId: existing.seriesId, seriesType: existing.seriesType, installmentNumber: existing.installmentNumber, installmentTotal: existing.installmentTotal };
     await ensureBillCapacity(req.user, [entry], req.params.id);
     const bill = await storage.updateBill(req.user.id, req.params.id, entry);
@@ -209,10 +220,10 @@ export async function createApp(options = {}) {
   }));
   app.post("/api/cards", authenticate, asyncRoute(async (req, res) => {
     const card = cardSchema.parse(req.body);
-    const access = await getAccess(req.user);
+    const access = await ensureProfileAccess(req.user, card.profile);
     if (access.plan === "free") {
       const data = await storage.listData(req.user.id);
-      if (data.cards.length >= freeLimits.cards) return res.status(402).json({ error: `O plano gratis permite ${freeLimits.cards} cartao. Assine o Pro para continuar.` });
+      if (data.cards.filter((item) => item.profile === "Casa").length >= freeLimits.cards) return res.status(402).json({ error: `O plano gratis permite ${freeLimits.cards} cartao na Casa. Assine o Pro para continuar.` });
     }
     return res.status(201).json(await storage.createCard(req.user.id, card));
   }));

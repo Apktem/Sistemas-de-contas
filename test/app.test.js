@@ -90,6 +90,9 @@ test("aplica limites gratis e libera recursos apos assinatura Pro", async (conte
   const base = `http://127.0.0.1:${server.address().port}`;
   const account = await post(base, "/api/register", { identifier: "cliente@example.com", password: "SenhaForte123" });
   const card = { name: "Nubank", limit: 1000, closeDay: 5, dueDay: 12, profile: "Casa" };
+  const companyBill = { name: "Contabilidade", amount: 300, dueDate: "2026-07-15", profile: "Empresa", category: "Impostos", status: "pending", tags: [], installments: 1 };
+  assert.equal((await post(base, "/api/bills", companyBill, account.cookie)).status, 402);
+  assert.equal((await post(base, "/api/cards", { ...card, profile: "Empresa" }, account.cookie)).status, 402);
   assert.equal((await post(base, "/api/cards", card, account.cookie)).status, 201);
   assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 402);
 
@@ -99,6 +102,7 @@ test("aplica limites gratis e libera recursos apos assinatura Pro", async (conte
   remoteStatus = "authorized";
   const synced = await post(base, "/api/subscription/sync", {}, account.cookie);
   assert.equal(synced.body.plan, "pro");
+  assert.equal((await post(base, "/api/bills", companyBill, account.cookie)).status, 201);
   assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 201);
 });
 
