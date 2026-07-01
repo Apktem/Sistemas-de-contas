@@ -253,6 +253,20 @@ export async function createApp(options = {}) {
   }));
 
   app.use("/api", (_req, res) => res.status(404).json({ error: "Rota não encontrada." }));
+  const brandAssets = {
+    "/brand-icon-32": "ricoxp-icon-32.png",
+    "/brand-icon-180": "ricoxp-icon-180.png",
+    "/brand-icon-192": "ricoxp-icon-192.png",
+    "/brand-icon-512": "ricoxp-icon-512.png",
+    "/brand-social": "ricoxp-social.png",
+  };
+  Object.entries(brandAssets).forEach(([route, file]) => {
+    app.get(route, (_req, res) => {
+      res.type("png");
+      res.set("Cache-Control", "public, max-age=86400");
+      res.sendFile(path.join(root, "assets", file));
+    });
+  });
   const distRoot = path.join(root, "dist");
   const hasBuild = existsSync(path.join(distRoot, "index.html"));
   if (hasBuild) {

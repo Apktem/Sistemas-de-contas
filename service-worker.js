@@ -16,8 +16,8 @@ self.addEventListener("push", (event) => {
   const data = event.data?.json?.() || {};
   event.waitUntil(self.registration.showNotification(data.title || "RicoXP Gestão Financeira", {
     body: data.body || "Você tem uma conta próxima do vencimento.",
-    icon: "/assets/ricoxp-icon-192.png",
-    badge: "/assets/ricoxp-icon-32.png",
+    icon: "/brand-icon-192",
+    badge: "/brand-icon-32",
     tag: data.tag || "finance-reminder",
     data: { url: data.url || "/?abrir=lembretes" },
     actions: [{ action: "open", title: "Abrir sistema" }],
