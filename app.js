@@ -130,7 +130,7 @@ function renderSubscription() {
   $("#subscriptionBadge").className = `badge ${isPro ? "active" : String(subscription.status || "").includes("pending") ? "pending" : "inactive"}`;
   $("#billingEmail").value = subscription.payerEmail || (state.user.identifierType === "email" ? state.user.identifierLabel : "");
   $("#subscriptionForm").classList.toggle("hidden", isPro || subscription.status === "pending");
-  $("#cancelSubscription").classList.toggle("hidden", subscription.billingType !== "card" || subscription.status === "cancelled" || state.user.role === "admin");
+  $("#cancelSubscription").classList.toggle("hidden", subscription.billingType !== "card" || subscription.status === "cancelled");
   $("#syncSubscription").classList.toggle("hidden", !subscription.status);
   $("#subscribeButton").disabled = !subscription.configured;
   $("#pixButton").disabled = !subscription.configured || subscription.status === "pix_pending";
