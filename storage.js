@@ -29,8 +29,8 @@ export class MemoryStorage {
   async deletePushSubscription(userId, endpoint) { const before = this.pushSubscriptions.length; this.pushSubscriptions = this.pushSubscriptions.filter((item) => !(item.userId === userId && item.endpoint === endpoint)); return this.pushSubscriptions.length < before; }
   async getNotificationDelivery(billId, scheduledFor) { return this.notificationDeliveries.find((item) => item.billId === billId && item.scheduledFor === scheduledFor) || null; }
   async recordNotificationDelivery(data) { const index = this.notificationDeliveries.findIndex((item) => item.billId === data.billId && item.scheduledFor === data.scheduledFor); const item = { id: index >= 0 ? this.notificationDeliveries[index].id : randomUUID(), ...data }; if (index >= 0) this.notificationDeliveries[index] = item; else this.notificationDeliveries.push(item); return item; }
-  async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter((item) => item.status === "authorized").length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
-  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && item.status === "authorized") ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null, billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
+  async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter(isActiveSubscription).length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
+  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && isActiveSubscription(item)) ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null, billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
   async setUserActive(id, active) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.active = active; return publicUser(user); }
   async setUserRole(id, role) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.role = role; return publicUser(user); }
 }
@@ -196,25 +196,25 @@ class SupabaseStorage {
       this.client.from("users").select("*", { count: "exact", head: true }),
       this.client.from("users").select("*", { count: "exact", head: true }).eq("active", true),
       this.client.from("bills").select("amount"),
-      this.client.from("subscriptions").select("status"),
+      this.client.from("subscriptions").select("status, next_payment_date"),
     ]);
     check(usersResult.error); check(activeResult.error); check(billsResult.error);
     const subscriptions = isMissingSubscriptionTable(subscriptionsResult.error) ? [] : (check(subscriptionsResult.error), subscriptionsResult.data);
-    return { users: usersResult.count || 0, activeUsers: activeResult.count || 0, proUsers: subscriptions.filter((item) => item.status === "authorized").length, bills: billsResult.data.length, totalAmount: billsResult.data.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+    return { users: usersResult.count || 0, activeUsers: activeResult.count || 0, proUsers: subscriptions.filter((item) => isActiveSubscription(mapSubscription(item))).length, bills: billsResult.data.length, totalAmount: billsResult.data.reduce((sum, bill) => sum + Number(bill.amount), 0) };
   }
 
   async adminUsers() {
     const [{ data: users, error: usersError }, { data: bills, error: billsError }, subscriptionsResult] = await Promise.all([
       this.client.from("users").select("id, identifier_type, identifier_label, role, active, created_at").order("created_at", { ascending: false }),
       this.client.from("bills").select("user_id, amount"),
-      this.client.from("subscriptions").select("user_id, status"),
+      this.client.from("subscriptions").select("user_id, status, next_payment_date"),
     ]);
     check(usersError); check(billsError);
     const subscriptions = isMissingSubscriptionTable(subscriptionsResult.error) ? [] : (check(subscriptionsResult.error), subscriptionsResult.data);
     return users.map((user) => {
       const userBills = bills.filter((bill) => bill.user_id === user.id);
       const subscription = subscriptions.find((item) => item.user_id === user.id);
-      return { ...mapUser(user), plan: user.role === "admin" || subscription?.status === "authorized" ? "pro" : "free", subscriptionStatus: subscription?.status || null, billCount: userBills.length, totalAmount: userBills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+      return { ...mapUser(user), plan: user.role === "admin" || isActiveSubscription(subscription ? mapSubscription(subscription) : null) ? "pro" : "free", subscriptionStatus: subscription?.status || null, billCount: userBills.length, totalAmount: userBills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
     });
   }
 
@@ -242,6 +242,10 @@ function mapUser(row, includePassword = false) {
   return user;
 }
 function publicUser(user) { return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt }; }
+function isActiveSubscription(subscription) {
+  if (subscription?.status === "authorized") return true;
+  return subscription?.status === "pix_authorized" && new Date(subscription.nextPaymentDate || 0).getTime() > Date.now();
+}
 function check(error) { if (error) { const wrapped = new Error(error.message); wrapped.code = error.code; throw wrapped; } }
 function isMissingSubscriptionTable(error) { return error?.code === "42P01" || error?.code === "PGRST205"; }
 function isMissingFeatureTable(error) { return error?.code === "42P01" || error?.code === "PGRST205"; }

@@ -1,5 +1,6 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null, notificationPreferences: null };
+let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
 const $ = (selector) => document.querySelector(selector);
@@ -121,16 +122,19 @@ function renderSubscription() {
   const subscription = state.subscription;
   if (!subscription) return;
   const isPro = subscription.plan === "pro";
-  const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada" };
+  const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada", pix_pending: "Aguardando Pix", pix_authorized: "Pix confirmado", pix_rejected: "Pix não aprovado", pix_cancelled: "Pix cancelado" };
   $("#subscriptionTitle").textContent = isPro ? "Plano Pro" : "Plano Grátis";
-  $("#subscriptionDescription").textContent = isPro ? `Casa e Empresa com recursos ilimitados${subscription.nextPaymentDate ? ` · próxima cobrança em ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Área Casa com até 10 contas por mês, 1 cartão, painel e lembretes.";
-  $("#subscriptionBadge").textContent = labels[subscription.status] || (isPro ? "Ativa" : "Grátis");
-  $("#subscriptionBadge").className = `badge ${isPro ? "active" : subscription.status === "pending" ? "pending" : "inactive"}`;
+  const dateLabel = subscription.billingType === "pix" ? "acesso liberado até" : "próxima cobrança em";
+  $("#subscriptionDescription").textContent = isPro ? `Casa e Empresa com recursos ilimitados${subscription.nextPaymentDate ? ` · ${dateLabel} ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Área Casa com até 10 contas por mês, 1 cartão, painel e lembretes.";
+  $("#subscriptionBadge").textContent = subscription.status === "pix_authorized" && !isPro ? "Pix expirado" : labels[subscription.status] || (isPro ? "Ativa" : "Grátis");
+  $("#subscriptionBadge").className = `badge ${isPro ? "active" : String(subscription.status || "").includes("pending") ? "pending" : "inactive"}`;
   $("#billingEmail").value = subscription.payerEmail || (state.user.identifierType === "email" ? state.user.identifierLabel : "");
   $("#subscriptionForm").classList.toggle("hidden", isPro || subscription.status === "pending");
-  $("#cancelSubscription").classList.toggle("hidden", !subscription.status || subscription.status === "cancelled" || state.user.role === "admin");
+  $("#cancelSubscription").classList.toggle("hidden", subscription.billingType !== "card" || subscription.status === "cancelled" || state.user.role === "admin");
   $("#syncSubscription").classList.toggle("hidden", !subscription.status);
   $("#subscribeButton").disabled = !subscription.configured;
+  $("#pixButton").disabled = !subscription.configured || subscription.status === "pix_pending";
+  renderPixCheckout(subscription.pix);
   if (!subscription.configured && !isPro) $("#subscriptionDescription").textContent = "O checkout estará disponível assim que a integração do Mercado Pago for ativada.";
   $(".plan-option:first-child").classList.toggle("current", !isPro);
   $(".plan-option.featured").classList.toggle("current", isPro);
@@ -144,6 +148,34 @@ function renderSubscription() {
     try { savedWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
     if (savedWorkspace === "Empresa" && els.profileFilter.value !== "Empresa") setWorkspace("Empresa", false);
   }
+}
+
+function renderPixCheckout(pix) {
+  const checkout = $("#pixCheckout");
+  const hasCode = Boolean(pix?.qrCode);
+  checkout.classList.toggle("hidden", !hasCode);
+  if (!hasCode) return;
+  $("#pixCode").value = pix.qrCode;
+  $("#pixQrCode").src = pix.qrCodeBase64 ? `data:image/png;base64,${pix.qrCodeBase64}` : "";
+  $("#pixQrCode").classList.toggle("hidden", !pix.qrCodeBase64);
+  $("#openPixPayment").href = pix.ticketUrl || "#";
+  $("#openPixPayment").classList.toggle("hidden", !pix.ticketUrl);
+}
+
+function pollPixStatus(attempt = 0) {
+  clearTimeout(pixPollTimer);
+  if (attempt >= 45 || state.subscription?.status !== "pix_pending") return;
+  pixPollTimer = setTimeout(async () => {
+    try {
+      await loadSubscription(true);
+      if (state.subscription?.plan === "pro") {
+        await loadData();
+        setMessage(els.appMessage, "Pagamento confirmado. Seu Plano Pro está ativo por 30 dias.", true);
+        return;
+      }
+    } catch {}
+    pollPixStatus(attempt + 1);
+  }, 8000);
 }
 
 function getFilteredBills() {
@@ -502,6 +534,22 @@ $("#subscriptionForm").addEventListener("submit", async (event) => {
     const result = await api("/api/subscription/checkout", { method: "POST", body: JSON.stringify({ payerEmail: $("#billingEmail").value }) });
     location.href = result.checkoutUrl;
   } catch (error) { setMessage(els.appMessage, error.message); }
+});
+$("#pixButton").addEventListener("click", async () => {
+  setMessage(els.appMessage);
+  const payerEmail = $("#billingEmail").value;
+  if (!payerEmail || !$("#billingEmail").reportValidity()) return;
+  try {
+    const result = await api("/api/subscription/pix", { method: "POST", body: JSON.stringify({ payerEmail }) });
+    state.subscription = result.subscription;
+    renderSubscription();
+    pollPixStatus();
+    setMessage(els.appMessage, "Pix gerado. O Pro será liberado após a confirmação do pagamento.", true);
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
+$("#copyPixCode").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#pixCode").value); setMessage(els.appMessage, "Código Pix copiado.", true); }
+  catch { $("#pixCode").select(); document.execCommand("copy"); setMessage(els.appMessage, "Código Pix copiado.", true); }
 });
 $("#syncSubscription").addEventListener("click", async () => {
   try { await loadSubscription(true); await loadData(); setMessage(els.appMessage, "Situação da assinatura atualizada.", true); } catch (error) { setMessage(els.appMessage, error.message); }

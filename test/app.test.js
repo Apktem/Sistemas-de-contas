@@ -3,6 +3,7 @@ import { once } from "node:events";
 import test from "node:test";
 import { isValidCpf } from "../auth.js";
 import { createApp } from "../backend.js";
+import { normalizePixPayment, subscriptionPlan } from "../payments.js";
 import { MemoryStorage } from "../storage.js";
 import { runPushDispatch } from "../push.js";
 
@@ -104,6 +105,52 @@ test("aplica limites gratis e libera recursos apos assinatura Pro", async (conte
   assert.equal(synced.body.plan, "pro");
   assert.equal((await post(base, "/api/bills", companyBill, account.cookie)).status, 201);
   assert.equal((await post(base, "/api/cards", { ...card, name: "Inter" }, account.cookie)).status, 201);
+});
+
+test("libera o Pro por 30 dias apos a confirmacao do Pix", async (context) => {
+  const storage = new MemoryStorage();
+  let pixStatus = "pending";
+  let userId;
+  const pixRemote = () => ({
+    id: "pix-123",
+    external_reference: userId,
+    status: pixStatus,
+    date_approved: pixStatus === "approved" ? "2026-07-01T12:00:00.000Z" : null,
+    date_last_updated: "2026-07-01T12:00:00.000Z",
+    payer: { email: "pix@example.com" },
+    point_of_interaction: { transaction_data: { qr_code: "000201PIX", qr_code_base64: "base64-png", ticket_url: "https://pix.example/pay" } },
+  });
+  const payments = {
+    configured: true,
+    price: 29.9,
+    async createPix(id) { userId = id; return pixRemote(); },
+    async getPayment() { return pixRemote(); },
+  };
+  const app = await createApp({ storage, payments, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const account = await post(base, "/api/register", { identifier: "pix@example.com", password: "SenhaForte123" });
+  const checkout = await post(base, "/api/subscription/pix", { payerEmail: "pix@example.com" }, account.cookie);
+  assert.equal(checkout.status, 201);
+  assert.equal(checkout.body.subscription.status, "pix_pending");
+  assert.equal(checkout.body.subscription.pix.qrCode, "000201PIX");
+
+  pixStatus = "approved";
+  const webhook = await post(base, "/api/webhooks/mercadopago", { type: "payment", data: { id: "pix-123" } });
+  assert.equal(webhook.status, 200);
+  const subscription = await get(base, "/api/subscription", account.cookie);
+  assert.equal(subscription.body.plan, "pro");
+  assert.equal(subscription.body.billingType, "pix");
+  assert.equal(subscription.body.nextPaymentDate, "2026-07-31T12:00:00.000Z");
+});
+
+test("expira o acesso Pix ao final dos 30 dias", () => {
+  const active = normalizePixPayment({ id: "1", external_reference: "user", status: "approved", date_approved: new Date(Date.now() - 29 * 86400000).toISOString() });
+  const expired = normalizePixPayment({ id: "2", external_reference: "user", status: "approved", date_approved: new Date(Date.now() - 31 * 86400000).toISOString() });
+  assert.equal(subscriptionPlan(active), "pro");
+  assert.equal(subscriptionPlan(expired), "free");
 });
 
 test("cria parcelas futuras com tags e clona contas recorrentes", async (context) => {
