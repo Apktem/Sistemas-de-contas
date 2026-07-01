@@ -40,6 +40,9 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(17, 94
 .ghost-button, .small-button { background: #fff; border-color: var(--line); color: var(--ink); }
 .form-message { min-height: 20px; margin: 10px 0 0; color: var(--late); font-size: .84rem; font-weight: 700; }
 .form-message.success { color: var(--paid); }
+.support-link { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 0 14px; background: #fff; color: var(--ink); font-size: .88rem; font-weight: 700; text-decoration: none; }
+.support-link:hover { border-color: var(--brand); color: var(--brand); }
+.login-support { margin-top: 8px; }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
 .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 24px; padding: 24px; background: #0f2522; color: #fff; }
@@ -55,7 +58,9 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(17, 94
 .nav-list { display: grid; gap: 8px; }
 .nav-item { width: 100%; text-align: left; color: #d7e6e3; background: transparent; }
 .nav-item.active { background: #eaf7f3; color: #0e4743; }
-.sidebar .ghost-button { margin-top: auto; background: transparent; border-color: rgba(255, 255, 255, .18); }
+.sidebar-actions { display: grid; gap: 8px; margin-top: auto; }
+.sidebar-actions .support-link, .sidebar .ghost-button { width: 100%; background: transparent; border-color: rgba(255, 255, 255, .18); color: #b7e7de; }
+.sidebar-actions .support-link:hover { border-color: #b7e7de; color: #fff; }
 .content { min-width: 0; padding: 26px; }
 .topbar { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 22px; }
 .filters { display: grid; grid-template-columns: 170px 120px; gap: 12px; }
@@ -155,7 +160,8 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
   .sidebar-head { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .nav-list { grid-template-columns: repeat(6, minmax(0, 1fr)); overflow-x: auto; }
   .nav-item { padding: 0 10px; text-align: center; white-space: nowrap; }
-  .sidebar .ghost-button { position: absolute; top: 18px; right: 18px; min-height: 36px; }
+  .sidebar-actions { grid-template-columns: 1fr auto; margin-top: 0; }
+  .sidebar .ghost-button { min-height: 36px; }
   .user-badge { padding-right: 70px; }
   .topbar { align-items: stretch; }
   .dashboard-grid, .admin-detail-grid { grid-template-columns: 1fr; }
