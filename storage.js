@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -14,7 +14,7 @@ export class MemoryStorage {
   async updateUserPassword(id, passwordHash) { const user = this.users.find((item) => item.id === id); if (!user) return false; user.passwordHash = passwordHash; return true; }
   async createPasswordResetToken(userId, tokenHash, expiresAt) { this.passwordResetTokens = this.passwordResetTokens.filter((item) => item.userId !== userId); this.passwordResetTokens.push({ userId, tokenHash, expiresAt, usedAt: null }); }
   async consumePasswordResetToken(tokenHash) { const token = this.passwordResetTokens.find((item) => item.tokenHash === tokenHash && !item.usedAt && new Date(item.expiresAt) > new Date()); if (!token) return null; token.usedAt = new Date().toISOString(); return token.userId; }
-  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId) }; }
+  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId), incomes: this.incomes.filter((item) => item.userId === userId) }; }
   async getBill(userId, id) { return this.bills.find((item) => item.id === id && item.userId === userId) || null; }
   async createBill(userId, data) { const bill = { id: randomUUID(), userId, ...data }; this.bills.push(bill); return bill; }
   async createBills(userId, entries) { const bills = entries.map((data) => ({ id: randomUUID(), userId, ...data })); this.bills.push(...bills); return bills; }
@@ -22,6 +22,7 @@ export class MemoryStorage {
   async deleteBill(userId, id) { const before = this.bills.length; this.bills = this.bills.filter((item) => !(item.id === id && item.userId === userId)); return this.bills.length < before; }
   async createCard(userId, data) { const card = { id: randomUUID(), userId, ...data }; this.cards.push(card); return card; }
   async deleteCard(userId, id) { const before = this.cards.length; this.cards = this.cards.filter((item) => !(item.id === id && item.userId === userId)); return this.cards.length < before; }
+  async upsertIncome(userId, data) { const index = this.incomes.findIndex((item) => item.userId === userId && item.month === data.month && item.profile === data.profile); const income = { id: index >= 0 ? this.incomes[index].id : randomUUID(), userId, ...data }; if (index >= 0) this.incomes[index] = income; else this.incomes.push(income); return income; }
   async getSubscription(userId) { return this.subscriptions.find((item) => item.userId === userId) || null; }
   async getSubscriptionByProviderId(providerId) { return this.subscriptions.find((item) => item.providerId === providerId) || null; }
   async upsertSubscription(data) { const index = this.subscriptions.findIndex((item) => item.userId === data.userId); const item = { ...(index >= 0 ? this.subscriptions[index] : {}), ...data }; if (index >= 0) this.subscriptions[index] = item; else this.subscriptions.push(item); return item; }
@@ -104,12 +105,14 @@ class SupabaseStorage {
   }
 
   async listData(userId) {
-    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }] = await Promise.all([
+    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }, incomeResult] = await Promise.all([
       this.client.from("bills").select("*").eq("user_id", userId).order("due_date"),
       this.client.from("cards").select("id, name, credit_limit, close_day, due_day, profile").eq("user_id", userId).order("name"),
+      this.client.from("monthly_incomes").select("id, user_id, month, profile, amount").eq("user_id", userId).order("month"),
     ]);
     check(billsError); check(cardsError);
-    return { bills: bills.map(mapBill), cards: cards.map(mapCard) };
+    const incomes = isMissingFeatureTable(incomeResult.error) ? [] : (check(incomeResult.error), incomeResult.data.map(mapIncome));
+    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes };
   }
 
   async getBill(userId, id) {
@@ -153,6 +156,13 @@ class SupabaseStorage {
   async deleteCard(userId, id) {
     const { data, error } = await this.client.from("cards").delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle();
     check(error); return Boolean(data);
+  }
+
+  async upsertIncome(userId, data) {
+    const row = { user_id: userId, month: data.month, profile: data.profile, amount: data.amount, updated_at: new Date().toISOString() };
+    const { data: saved, error } = await this.client.from("monthly_incomes").upsert(row, { onConflict: "user_id,month,profile" }).select("id, user_id, month, profile, amount").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de renda mensal no Supabase.");
+    check(error); return mapIncome(saved);
   }
 
   async getSubscription(userId) {
@@ -271,6 +281,7 @@ function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.
 function toLegacyBillRow(row) { const { tags, series_id, series_type, installment_number, installment_total, ...legacy } = row; return legacy; }
 function mapBill(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, amount: Number(row.amount), dueDate: row.due_date || row.dueDate, profile: row.profile, category: row.category, status: row.status, tags: row.tags || [], seriesId: row.series_id || row.seriesId || null, seriesType: row.series_type || row.seriesType || "single", installmentNumber: row.installment_number || row.installmentNumber || null, installmentTotal: row.installment_total || row.installmentTotal || null }; }
 function mapCard(row) { return { id: row.id, name: row.name, limit: Number(row.credit_limit), closeDay: row.close_day, dueDay: row.due_day, profile: row.profile }; }
+function mapIncome(row) { return { id: row.id, userId: row.user_id || row.userId, month: row.month, profile: row.profile, amount: Number(row.amount) }; }
 function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }
 function mapNotificationPreferences(row) { return { userId: row.user_id, pushEnabled: Boolean(row.push_enabled), reminderDays: Number(row.reminder_days || 2), updatedAt: row.updated_at || null }; }
 function mapNotificationDelivery(row) { return { id: row.id, userId: row.user_id, billId: row.bill_id, scheduledFor: row.scheduled_for, status: row.status, providerMessageId: row.provider_message_id, error: row.error }; }

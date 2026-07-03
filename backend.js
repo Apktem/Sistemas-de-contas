@@ -47,6 +47,7 @@ const cardSchema = z.object({
 });
 const checkoutSchema = z.object({ payerEmail: z.string().trim().email().max(320) });
 const notificationSchema = z.object({ pushEnabled: z.boolean(), reminderDays: z.coerce.number().int().min(1).max(30) });
+const incomeSchema = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), profile: z.enum(profiles), amount: z.coerce.number().nonnegative().max(999999999.99) });
 const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048), keys: z.object({ p256dh: z.string().min(20).max(512), auth: z.string().min(8).max(256) }) });
 const freeLimits = { billsPerMonth: 10, cards: 1 };
 
@@ -191,7 +192,12 @@ export async function createApp(options = {}) {
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
     const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
     if (access.plan === "pro") return res.json(data);
-    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa") });
+    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa") });
+  }));
+  app.put("/api/income", authenticate, asyncRoute(async (req, res) => {
+    const input = incomeSchema.parse(req.body);
+    await ensureProfileAccess(req.user, input.profile);
+    return res.json(await storage.upsertIncome(req.user.id, input));
   }));
   app.get("/api/notifications/preferences", authenticate, asyncRoute(async (req, res) => {
     const access = await getAccess(req.user);

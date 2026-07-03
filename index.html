@@ -123,8 +123,12 @@
             <article class="metric late"><span>Vencidas</span><strong id="metricOverdue">R$ 0,00</strong><small id="metricOverdueCount">0 contas</small></article>
           </div>
           <div class="dashboard-grid">
-            <section class="panel"><div class="panel-title"><h2>Situação das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><canvas id="statusChart" width="280" height="280" aria-label="Gráfico de contas"></canvas></div></section>
+            <section class="panel"><div class="panel-title"><h2>Situação das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><canvas id="statusChart" width="280" height="280" aria-label="Gráfico de contas pagas, a vencer e vencidas"></canvas></div><div id="statusLegend" class="chart-legend"></div></section>
             <section class="panel"><div class="panel-title"><h2>Próximos vencimentos</h2><span>7 dias</span></div><div id="upcomingList" class="stack-list"></div></section>
+          </div>
+          <div class="dashboard-grid insights-grid">
+            <section class="panel income-panel"><div class="panel-title"><div><h2>Renda mensal</h2><p class="muted">Informe quanto você recebe nesta área.</p></div><span id="incomePercent">0% comprometido</span></div><form id="incomeForm" class="income-form"><label>Renda do mês<input id="monthlyIncome" type="number" min="0" step="0.01" placeholder="Ex: 5000,00" required /></label><button class="primary-button" type="submit">Salvar renda</button></form><div class="income-summary"><div><span>Renda</span><strong id="incomeAmount">R$ 0,00</strong></div><div><span>Despesas</span><strong id="incomeExpenses">R$ 0,00</strong></div><div><span>Disponível</span><strong id="incomeRemaining">R$ 0,00</strong></div></div><div class="commitment-track" aria-label="Percentual da renda comprometida"><i id="incomeProgress"></i></div></section>
+            <section class="panel"><div class="panel-title"><h2>Gastos por categoria</h2><span id="categoryTotal">R$ 0,00</span></div><div id="categoryChart" class="category-chart"></div></section>
           </div>
           <section class="panel"><div class="panel-title"><h2>Previsão dos próximos meses</h2><span>6 meses</span></div><div id="forecastList" class="forecast-list"></div></section>
         </section>

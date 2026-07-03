@@ -1,5 +1,5 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const state = { user: null, bills: [], cards: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null };
+const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -88,7 +88,8 @@ window.addEventListener("appinstalled", () => {
 async function loadData() {
   const data = await api("/api/data");
   state.bills = data.bills;
-  state.cards = data.cards;
++
++  render();
   render();
 }
 
@@ -195,7 +196,8 @@ function billSituation(bill) {
 
 function render() {
   renderMetrics();
-  renderChart();
++
++  renderLists();
   renderLists();
   renderTable();
   renderCards();
@@ -245,12 +247,44 @@ function renderChart() {
   ctx.fillStyle = "#17211f"; ctx.font = "700 22px Arial"; ctx.textAlign = "center"; ctx.fillText(`${percent}%`, 140, 135);
   ctx.font = "12px Arial"; ctx.fillStyle = "#64716e"; ctx.fillText("pago", 140, 154);
   $("#paidPercent").textContent = `${percent}% pago`;
+  $("#statusLegend").innerHTML = [
+    `<span><i style="background:#115e59"></i>Total ${money.format(total)}</span>`,
+    `<span><i style="background:#209869"></i>Pago ${money.format(values[0].value)}</span>`,
+    `<span><i style="background:#d8911c"></i>A vencer ${money.format(values[1].value)}</span>`,
+    `<span><i style="background:#cf3f3f"></i>Vencido ${money.format(values[2].value)}</span>`,
+  ].join("");
 }
 
 function sumByStatus(bills, status) {
   return bills.filter((bill) => billSituation(bill) === status).reduce((sum, bill) => sum + Number(bill.amount), 0);
 }
 
+function renderIncome() {
+  const income = state.incomes.find((item) => item.month === els.monthFilter.value && item.profile === els.profileFilter.value);
+  const amount = Number(income?.amount || 0);
+  const expenses = getFilteredBills().reduce((sum, bill) => sum + Number(bill.amount), 0);
+  const remaining = amount - expenses;
+  const percent = amount > 0 ? Math.round((expenses / amount) * 100) : 0;
+  $("#monthlyIncome").value = amount || "";
+  $("#incomeAmount").textContent = money.format(amount);
+  $("#incomeExpenses").textContent = money.format(expenses);
+  $("#incomeRemaining").textContent = money.format(remaining);
+  $("#incomeRemaining").classList.toggle("negative", remaining < 0);
+  $("#incomePercent").textContent = amount > 0 ? `${percent}% comprometido` : "Renda não informada";
+  $("#incomeProgress").style.width = `${Math.min(percent, 100)}%`;
+  $("#incomeProgress").classList.toggle("warning", percent >= 80 && percent <= 100);
+  $("#incomeProgress").classList.toggle("danger", percent > 100);
+}
+
+function renderCategoryChart() {
+  const colors = { Moradia: "#115e59", Servicos: "#18aee8", Cartao: "#7968c8", Impostos: "#cf3f3f", Saude: "#209869", Equipe: "#d8911c", Outros: "#64716e" };
+  const totals = getFilteredBills().reduce((groups, bill) => ({ ...groups, [bill.category]: (groups[bill.category] || 0) + Number(bill.amount) }), {});
+  const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+  const max = Math.max(...entries.map((entry) => entry[1]), 1);
+  $("#categoryTotal").textContent = money.format(total);
+  $("#categoryChart").innerHTML = entries.length ? entries.map(([category, value]) => `<div class="category-row"><span>${escapeHtml(category)}</span><div><i style="width:${Math.round((value / max) * 100)}%;background:${colors[category] || colors.Outros}"></i></div><strong>${money.format(value)}</strong></div>`).join("") : '<p class="muted">Cadastre contas para visualizar as categorias.</p>';
+}
 function renderLists() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -265,10 +299,25 @@ function drawRows(selector, bills, emptyText) {
   container.innerHTML = bills.map((bill) => {
     const situation = billSituation(bill);
     const text = situation === "overdue" ? `Venceu há ${Math.abs(bill.days)} dia(s)` : `Vence em ${bill.days} dia(s)`;
-    return `<div class="list-row"><div><strong>${escapeHtml(bill.name)}</strong><small>${formatDate(bill.dueDate)} · ${money.format(Number(bill.amount))}</small></div><span class="badge ${situation}">${text}</span></div>`;
+    return `<button class="list-row list-row-link" data-bill-link="${bill.id}" type="button"><span><strong>${escapeHtml(bill.name)}</strong><small>${formatDate(bill.dueDate)} · ${money.format(Number(bill.amount))}</small></span><span class="badge ${situation}">${text}</span></button>`;
   }).join("");
 }
 
+function openBillFromDashboard(id) {
+  const bill = state.bills.find((item) => item.id === id);
+  if (!bill) return;
+  els.monthFilter.value = bill.dueDate.slice(0, 7);
+  setWorkspace(bill.profile);
+  switchView("bills", "Contas");
+  render();
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`[data-bill-row="${id}"]`);
+    if (!row) return;
+    row.classList.add("highlight-row");
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => row.classList.remove("highlight-row"), 2600);
+  });
+}
 function renderForecast() {
   const profile = els.profileFilter.value;
   const months = Array.from({ length: 6 }, (_, index) => {
@@ -288,7 +337,7 @@ function renderTable() {
     const tags = `${fixedTag}${bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : fixedTag ? "" : '<span class="muted">-</span>'}`;
     const cloneButton = bill.seriesType === "single" ? `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>` : "";
     const payClass = bill.status === "paid" ? "" : " action-pay";
-    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button${payClass}" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button action-edit" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button action-delete" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
+    return `<tr data-bill-row="${bill.id}"><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button${payClass}" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button action-edit" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button action-delete" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
   }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
@@ -467,6 +516,20 @@ $("#installAppButton").addEventListener("click", async () => {
 });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
+["#upcomingList", "#reminderList"].forEach((selector) => $(selector).addEventListener("click", (event) => {
+  const target = event.target.closest("[data-bill-link]");
+  if (target) openBillFromDashboard(target.dataset.billLink);
+}));
+$("#incomeForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const income = await api("/api/income", { method: "PUT", body: JSON.stringify({ month: els.monthFilter.value, profile: els.profileFilter.value, amount: Number($("#monthlyIncome").value) }) });
+    const index = state.incomes.findIndex((item) => item.month === income.month && item.profile === income.profile);
+    if (index >= 0) state.incomes[index] = income; else state.incomes.push(income);
+    renderIncome();
+    setMessage(els.appMessage, "Renda mensal salva.", true);
+  } catch (error) { setMessage(els.appMessage, error.message); }
+});
 $$('[data-workspace]').forEach((button) => button.addEventListener("click", () => selectWorkspace(button.dataset.workspace)));
 $("#exportButton").addEventListener("click", exportCsv);
 els.cancelEditButton.addEventListener("click", resetBillForm);

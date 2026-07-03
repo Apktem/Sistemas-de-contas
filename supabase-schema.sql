@@ -38,6 +38,18 @@ alter table public.bills add column if not exists installment_total integer;
 
 create index if not exists bills_series_idx on public.bills(series_id);
 
+create table if not exists public.monthly_incomes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  month text not null check (month ~ '^\d{4}-\d{2}$'),
+  profile text not null check (profile in ('Casa', 'Empresa')),
+  amount numeric(12,2) not null check (amount >= 0),
+  updated_at timestamptz not null default now(),
+  unique (user_id, month, profile)
+);
+
+create index if not exists monthly_incomes_user_month_idx on public.monthly_incomes(user_id, month);
+
 create table if not exists public.cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -115,11 +127,12 @@ delete from public.notification_deliveries where channel = 'whatsapp';
 alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
+alter table public.monthly_incomes enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.notification_deliveries enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.password_reset_tokens enable row level security;
 
-revoke all on public.users, public.bills, public.cards, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
+revoke all on public.users, public.bills, public.cards, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
 revoke all on public.password_reset_tokens from anon, authenticated;

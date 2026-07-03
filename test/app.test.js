@@ -236,6 +236,21 @@ test("cria parcelas futuras com tags e clona contas recorrentes", async (context
   assert.deepEqual(cloned.body.tags, ["fixa"]);
 });
 
+test("salva renda mensal isolada por usuário, mês e área", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const first = await post(base, "/api/register", { identifier: "renda1@example.com", password: "SenhaForte123" });
+  const second = await post(base, "/api/register", { identifier: "renda2@example.com", password: "SenhaForte123" });
+  const saved = await put(base, "/api/income", { month: "2026-07", profile: "Casa", amount: 5000 }, first.cookie);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.amount, 5000);
+  assert.equal((await get(base, "/api/data", first.cookie)).body.incomes.length, 1);
+  assert.equal((await get(base, "/api/data", second.cookie)).body.incomes.length, 0);
+});
 test("envia cada notificação push uma unica vez", async () => {
   const storage = new MemoryStorage();
   const user = await storage.createUser({ email: "alerta@example.com", lookup: "alerta@example.com", identifierType: "email", identifierLabel: "alerta@example.com", passwordHash: "hash", role: "user" });
@@ -259,6 +274,10 @@ async function get(base, path, cookie) {
   return { status: response.status, body: await response.json() };
 }
 
+async function put(base, path, body, cookie = "") {
+  const response = await fetch(`${base}${path}`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
+  return { status: response.status, body: await response.json() };
+}
 async function patch(base, path, body, cookie = "") {
   const response = await fetch(`${base}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
   return { status: response.status, body: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };
