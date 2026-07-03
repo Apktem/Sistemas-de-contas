@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -10,6 +10,10 @@ export class MemoryStorage {
     this.users.push(user); return publicUser(user);
   }
   async getUser(id) { const user = this.users.find((item) => item.id === id); return user ? publicUser(user) : null; }
+  async updateUserProfile(id, data) { const user = this.users.find((item) => item.id === id); if (!user) return null; if (data.email && user.identifierType !== "email") throw profileEmailError(); Object.assign(user, data, data.email ? { identifierLabel: data.email } : {}); return publicUser(user); }
+  async updateUserPassword(id, passwordHash) { const user = this.users.find((item) => item.id === id); if (!user) return false; user.passwordHash = passwordHash; return true; }
+  async createPasswordResetToken(userId, tokenHash, expiresAt) { this.passwordResetTokens = this.passwordResetTokens.filter((item) => item.userId !== userId); this.passwordResetTokens.push({ userId, tokenHash, expiresAt, usedAt: null }); }
+  async consumePasswordResetToken(tokenHash) { const token = this.passwordResetTokens.find((item) => item.tokenHash === tokenHash && !item.usedAt && new Date(item.expiresAt) > new Date()); if (!token) return null; token.usedAt = new Date().toISOString(); return token.userId; }
   async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId) }; }
   async getBill(userId, id) { return this.bills.find((item) => item.id === id && item.userId === userId) || null; }
   async createBill(userId, data) { const bill = { id: randomUUID(), userId, ...data }; this.bills.push(bill); return bill; }
@@ -30,7 +34,8 @@ export class MemoryStorage {
   async getNotificationDelivery(billId, scheduledFor) { return this.notificationDeliveries.find((item) => item.billId === billId && item.scheduledFor === scheduledFor) || null; }
   async recordNotificationDelivery(data) { const index = this.notificationDeliveries.findIndex((item) => item.billId === data.billId && item.scheduledFor === data.scheduledFor); const item = { id: index >= 0 ? this.notificationDeliveries[index].id : randomUUID(), ...data }; if (index >= 0) this.notificationDeliveries[index] = item; else this.notificationDeliveries.push(item); return item; }
   async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter(isActiveSubscription).length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
-  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && isActiveSubscription(item)) ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null, billCount: this.bills.filter((bill) => bill.userId === user.id).length, totalAmount: this.bills.filter((bill) => bill.userId === user.id).reduce((sum, bill) => sum + Number(bill.amount), 0) })); }
+  async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && isActiveSubscription(item)) ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null })); }
+  async adminUser(id) { return (await this.adminUsers()).find((user) => user.id === id) || null; }
   async setUserActive(id, active) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.active = active; return publicUser(user); }
   async setUserRole(id, role) { const user = this.users.find((item) => item.id === id); if (!user) return null; user.role = role; return publicUser(user); }
 }
@@ -54,15 +59,48 @@ class SupabaseStorage {
   }
 
   async createUser(data) {
-    const row = { id: randomUUID(), email: data.email || null, cpf_hash: data.cpfHash || null, identifier_type: data.identifierType, identifier_label: data.identifierLabel, password_hash: data.passwordHash, role: data.role };
-    const { data: created, error } = await this.client.from("users").insert(row).select("id, identifier_type, identifier_label, role, active, created_at").single();
+    const row = { id: randomUUID(), email: data.email || null, cpf_hash: data.cpfHash || null, identifier_type: data.identifierType, identifier_label: data.identifierLabel, password_hash: data.passwordHash, role: data.role, name: data.name, avatar_data: data.avatarData || null };
+    let result = await this.client.from("users").insert(row).select("*").single();
+    if (isMissingFeatureColumn(result.error)) { const { name, avatar_data, ...legacy } = row; result = await this.client.from("users").insert(legacy).select("*").single(); }
+    const { data: created, error } = result;
     if (error?.code === "23505") throw duplicateError();
     check(error); return mapUser(created);
   }
 
   async getUser(id) {
-    const { data, error } = await this.client.from("users").select("id, identifier_type, identifier_label, role, active, created_at").eq("id", id).maybeSingle();
+    const { data, error } = await this.client.from("users").select("*").eq("id", id).maybeSingle();
     check(error); return data ? mapUser(data) : null;
+  }
+
+  async updateUserProfile(id, data) {
+    const current = await this.getUser(id);
+    if (!current) return null;
+    if (data.email && current.identifierType !== "email") throw profileEmailError();
+    const row = { name: data.name, avatar_data: data.avatarData || null };
+    if (data.email) { row.email = data.email; row.identifier_label = data.email; }
+    const { data: saved, error } = await this.client.from("users").update(row).eq("id", id).select("*").maybeSingle();
+    if (isMissingFeatureColumn(error)) throw migrationError("Atualize a estrutura de clientes no Supabase.");
+    if (error?.code === "23505") throw duplicateError();
+    check(error); return saved ? mapUser(saved) : null;
+  }
+
+  async updateUserPassword(id, passwordHash) {
+    const { data, error } = await this.client.from("users").update({ password_hash: passwordHash }).eq("id", id).select("id").maybeSingle();
+    check(error); return Boolean(data);
+  }
+
+  async createPasswordResetToken(userId, tokenHash, expiresAt) {
+    const deleteResult = await this.client.from("password_reset_tokens").delete().eq("user_id", userId);
+    if (isMissingFeatureTable(deleteResult.error)) throw migrationError("Crie a estrutura de recuperação de senha no Supabase.");
+    check(deleteResult.error);
+    const { error } = await this.client.from("password_reset_tokens").insert({ user_id: userId, token_hash: tokenHash, expires_at: expiresAt });
+    check(error);
+  }
+
+  async consumePasswordResetToken(tokenHash) {
+    const { data, error } = await this.client.from("password_reset_tokens").update({ used_at: new Date().toISOString() }).eq("token_hash", tokenHash).is("used_at", null).gt("expires_at", new Date().toISOString()).select("user_id").maybeSingle();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a estrutura de recuperação de senha no Supabase.");
+    check(error); return data?.user_id || null;
   }
 
   async listData(userId) {
@@ -204,19 +242,19 @@ class SupabaseStorage {
   }
 
   async adminUsers() {
-    const [{ data: users, error: usersError }, { data: bills, error: billsError }, subscriptionsResult] = await Promise.all([
-      this.client.from("users").select("id, identifier_type, identifier_label, role, active, created_at").order("created_at", { ascending: false }),
-      this.client.from("bills").select("user_id, amount"),
+    const [{ data: users, error: usersError }, subscriptionsResult] = await Promise.all([
+      this.client.from("users").select("*").order("created_at", { ascending: false }),
       this.client.from("subscriptions").select("user_id, status, next_payment_date"),
     ]);
-    check(usersError); check(billsError);
+    check(usersError);
     const subscriptions = isMissingSubscriptionTable(subscriptionsResult.error) ? [] : (check(subscriptionsResult.error), subscriptionsResult.data);
     return users.map((user) => {
-      const userBills = bills.filter((bill) => bill.user_id === user.id);
       const subscription = subscriptions.find((item) => item.user_id === user.id);
-      return { ...mapUser(user), plan: user.role === "admin" || isActiveSubscription(subscription ? mapSubscription(subscription) : null) ? "pro" : "free", subscriptionStatus: subscription?.status || null, billCount: userBills.length, totalAmount: userBills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
+      return { ...mapUser(user), plan: user.role === "admin" || isActiveSubscription(subscription ? mapSubscription(subscription) : null) ? "pro" : "free", subscriptionStatus: subscription?.status || null };
     });
   }
+
+  async adminUser(id) { return (await this.adminUsers()).find((user) => user.id === id) || null; }
 
   async setUserActive(id, active) {
     const { data, error } = await this.client.from("users").update({ active }).eq("id", id).select("id, identifier_type, identifier_label, role, active, created_at").maybeSingle();
@@ -237,11 +275,11 @@ function mapSubscription(row) { return { userId: row.user_id, providerId: row.pr
 function mapNotificationPreferences(row) { return { userId: row.user_id, pushEnabled: Boolean(row.push_enabled), reminderDays: Number(row.reminder_days || 2), updatedAt: row.updated_at || null }; }
 function mapNotificationDelivery(row) { return { id: row.id, userId: row.user_id, billId: row.bill_id, scheduledFor: row.scheduled_for, status: row.status, providerMessageId: row.provider_message_id, error: row.error }; }
 function mapUser(row, includePassword = false) {
-  const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, role: row.role, active: Boolean(row.active), createdAt: row.created_at };
+  const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, name: row.name || row.identifier_label, avatarData: row.avatar_data || null, role: row.role, active: Boolean(row.active), createdAt: row.created_at };
   if (includePassword) user.passwordHash = row.password_hash;
   return user;
 }
-function publicUser(user) { return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt }; }
+function publicUser(user) { return { id: user.id, email: user.email || null, identifierType: user.identifierType, identifierLabel: user.identifierLabel, name: user.name || user.identifierLabel, avatarData: user.avatarData || null, role: user.role, active: user.active, createdAt: user.createdAt }; }
 function isActiveSubscription(subscription) {
   if (subscription?.status === "authorized") return true;
   return subscription?.status === "pix_authorized" && new Date(subscription.nextPaymentDate || 0).getTime() > Date.now();
@@ -252,6 +290,7 @@ function isMissingFeatureTable(error) { return error?.code === "42P01" || error?
 function isMissingFeatureColumn(error) { return error?.code === "42703" || error?.code === "PGRST204"; }
 function migrationError(message) { const error = new Error(message); error.status = 503; return error; }
 function duplicateError() { const error = new Error("Conta já cadastrada."); error.code = "ER_DUP_ENTRY"; return error; }
+function profileEmailError() { const error = new Error("Contas criadas com CPF não podem trocar o identificador por e-mail."); error.status = 400; return error; }
 function isPublicKey(key) {
   if (key.startsWith("sb_publishable_")) return true;
   try { return JSON.parse(Buffer.from(key.split(".")[1], "base64url").toString()).role === "anon"; } catch { return false; }

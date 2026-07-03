@@ -46,6 +46,22 @@ O e-mail definido em `ADMIN_EMAIL` recebe perfil administrativo ao criar a conta
 
 O checkout cria uma assinatura mensal pela API de Preapproval. O retorno e o webhook consultam a assinatura diretamente no Mercado Pago antes de atualizar o plano do usuário. Nunca coloque o Access Token no frontend ou no GitHub.
 
+## Perfis e recuperação de senha
+
+Execute novamente `supabase-schema.sql` no SQL Editor sempre que atualizar esta versão. O script adiciona nome, foto de perfil e a tabela de tokens temporários sem apagar os dados existentes.
+
+Para enviar os links de recuperação pela caixa `contato@ricoxp.com`, configure na hospedagem:
+
+```env
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_USER=contato@ricoxp.com
+SMTP_PASS=senha_da_caixa_de_email
+SMTP_FROM=RicoXP <contato@ricoxp.com>
+```
+
+O link de redefinição expira em 30 minutos e só pode ser usado uma vez. A senha da caixa de e-mail deve existir apenas nas variáveis protegidas da Hostinger.
+
 ## Notificações push
 
 Gere as chaves VAPID com `pnpm exec web-push generate-vapid-keys` e configure na Hostinger `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT`. A chave privada deve permanecer somente nas variáveis de ambiente do servidor.

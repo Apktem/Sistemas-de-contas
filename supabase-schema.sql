@@ -13,6 +13,9 @@ create table if not exists public.users (
   check ((email is not null) <> (cpf_hash is not null))
 );
 
+alter table public.users add column if not exists name text;
+alter table public.users add column if not exists avatar_data text;
+
 create table if not exists public.bills (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -58,6 +61,17 @@ create table if not exists public.subscriptions (
 );
 
 create index if not exists subscriptions_status_idx on public.subscriptions(status);
+
+create table if not exists public.password_reset_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists password_reset_user_idx on public.password_reset_tokens(user_id);
 
 create table if not exists public.notification_preferences (
   user_id uuid primary key references public.users(id) on delete cascade,
@@ -105,5 +119,7 @@ alter table public.subscriptions enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.notification_deliveries enable row level security;
 alter table public.push_subscriptions enable row level security;
+alter table public.password_reset_tokens enable row level security;
 
 revoke all on public.users, public.bills, public.cards, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
+revoke all on public.password_reset_tokens from anon, authenticated;

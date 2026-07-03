@@ -10,6 +10,7 @@ import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { normalizeIdentifier } from "./auth.js";
+import { SupportMailer } from "./mailer.js";
 import { isPixSubscription, MercadoPagoSubscriptions, normalizePixPayment, normalizeSubscription, pixPaymentDetails, subscriptionPlan } from "./payments.js";
 import { createStorage } from "./storage.js";
 import { runPushDispatch, startPushWorker, WebPushService } from "./push.js";
@@ -17,7 +18,13 @@ import { runPushDispatch, startPushWorker, WebPushService } from "./push.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const profiles = ["Casa", "Empresa"];
 const categories = ["Moradia", "Servicos", "Cartao", "Impostos", "Saude", "Equipe", "Outros"];
-const registerSchema = z.object({ identifier: z.string().min(5).max(320), password: z.string().min(8).max(72) });
+const avatarSchema = z.string().max(350000).regex(/^data:image\/(jpeg|png|webp);base64,/).nullable().optional();
+const loginSchema = z.object({ identifier: z.string().min(5).max(320), password: z.string().min(8).max(72) });
+const registerSchema = loginSchema.extend({ name: z.string().trim().min(2).max(100).optional(), avatarData: avatarSchema });
+const forgotPasswordSchema = z.object({ email: z.string().trim().email().max(320) });
+const resetPasswordSchema = z.object({ token: z.string().min(40).max(200), password: z.string().min(8).max(72) });
+const adminProfileSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.string().trim().email().max(320).optional(), avatarData: avatarSchema });
+const adminPasswordSchema = z.object({ password: z.string().min(8).max(72) });
 const billSchema = z.object({
   name: z.string().trim().min(2).max(160),
   amount: z.coerce.number().positive().max(999999999.99),
@@ -51,12 +58,13 @@ export async function createApp(options = {}) {
   if (production && (sessionSecret.length < 32 || cpfPepper.length < 32)) throw new Error("SESSION_SECRET e CPF_PEPPER devem ter pelo menos 32 caracteres.");
   const storage = options.storage || await createStorage(env);
   const payments = options.payments || new MercadoPagoSubscriptions({ accessToken: env.MERCADOPAGO_ACCESS_TOKEN, siteUrl: env.SITE_URL || "https://ricoxp.com", price: env.PRO_PRICE || 29.9 });
+  const mailer = options.mailer || new SupportMailer({ host: env.SMTP_HOST, port: env.SMTP_PORT || 465, user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM || "RicoXP <contato@ricoxp.com>", siteUrl: env.SITE_URL || "https://ricoxp.com" });
   const push = options.push || new WebPushService({ publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT || `mailto:${env.ADMIN_EMAIL || "suporte@ricoxp.com"}` });
   const adminEmail = String(env.ADMIN_EMAIL || "apktemoficial@gmail.com").trim().toLowerCase();
   const app = express();
   app.set("trust proxy", 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: "same-origin" } }));
-  app.use(express.json({ limit: "32kb" }));
+  app.use(express.json({ limit: "512kb" }));
   app.use(cookieParser());
 
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
@@ -134,6 +142,8 @@ export async function createApp(options = {}) {
       lookup: identity.lookup,
       identifierType: identity.type,
       identifierLabel: identity.label,
+      name: input.name || identity.label,
+      avatarData: input.avatarData || null,
       passwordHash,
       role: identity.type === "email" && identity.email === adminEmail ? "admin" : "user",
     });
@@ -142,13 +152,35 @@ export async function createApp(options = {}) {
   }));
 
   app.post("/api/login", authLimiter, asyncRoute(async (req, res) => {
-    const input = registerSchema.parse(req.body);
+    const input = loginSchema.parse(req.body);
     const identity = normalizeIdentifier(input.identifier, cpfPepper);
     let user = await storage.findUser(identity.type, identity.lookup);
     if (!user || !user.active || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: "E-mail/CPF ou senha incorretos." });
     user = await ensureAdminRole(user);
     setSession(res, user);
     return res.json({ user: sanitizeUser(user) });
+  }));
+
+  app.post("/api/password/forgot", authLimiter, asyncRoute(async (req, res) => {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    if (!mailer.configured) return res.status(503).json({ error: "A recuperação por e-mail ainda não foi configurada." });
+    const user = await storage.findUser("email", email.toLowerCase());
+    if (user?.active) {
+      const token = `${randomUUID()}${randomUUID()}`.replaceAll("-", "");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      await storage.createPasswordResetToken(user.id, tokenHash, new Date(Date.now() + 30 * 60 * 1000).toISOString());
+      await mailer.sendPasswordReset({ email: user.email, name: user.name, token });
+    }
+    return res.json({ message: "Se o e-mail estiver cadastrado, enviaremos um link válido por 30 minutos." });
+  }));
+
+  app.post("/api/password/reset", authLimiter, asyncRoute(async (req, res) => {
+    const { token, password } = resetPasswordSchema.parse(req.body);
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const userId = await storage.consumePasswordResetToken(tokenHash);
+    if (!userId) return res.status(400).json({ error: "Este link é inválido ou expirou. Solicite uma nova recuperação." });
+    await storage.updateUserPassword(userId, await bcrypt.hash(password, 12));
+    return res.json({ message: "Senha atualizada. Você já pode entrar no RicoXP." });
   }));
 
   app.post("/api/logout", (_req, res) => {
@@ -284,10 +316,20 @@ export async function createApp(options = {}) {
   app.get("/api/admin/overview", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await storage.adminOverview())));
   app.post("/api/admin/notifications/run", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await runPushDispatch(storage, push))));
   app.get("/api/admin/users", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json({ users: await storage.adminUsers() })));
-  app.get("/api/admin/users/:id/data", authenticate, adminOnly, asyncRoute(async (req, res) => {
-    const user = await storage.getUser(req.params.id);
+  app.get("/api/admin/users/:id", authenticate, adminOnly, asyncRoute(async (req, res) => {
+    const user = await storage.adminUser(req.params.id);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
-    return res.json({ user, ...await storage.listData(req.params.id) });
+    return res.json({ user });
+  }));
+  app.patch("/api/admin/users/:id", authenticate, adminOnly, asyncRoute(async (req, res) => {
+    const input = adminProfileSchema.parse(req.body);
+    const user = await storage.updateUserProfile(req.params.id, { ...input, email: input.email?.toLowerCase() });
+    return user ? res.json({ user }) : res.status(404).json({ error: "Usuário não encontrado." });
+  }));
+  app.patch("/api/admin/users/:id/password", authenticate, adminOnly, authLimiter, asyncRoute(async (req, res) => {
+    const { password } = adminPasswordSchema.parse(req.body);
+    const updated = await storage.updateUserPassword(req.params.id, await bcrypt.hash(password, 12));
+    return updated ? res.json({ message: "Senha do cliente atualizada." }) : res.status(404).json({ error: "Usuário não encontrado." });
   }));
   app.patch("/api/admin/users/:id/status", authenticate, adminOnly, asyncRoute(async (req, res) => {
     if (req.params.id === req.user.id) return res.status(400).json({ error: "Você não pode desativar sua própria conta." });
@@ -390,7 +432,7 @@ function monthDifference(from, to) {
 function serviceError(message, status) { const error = new Error(message); error.status = status; return error; }
 
 function sanitizeUser(user) {
-  return { id: user.id, identifierType: user.identifierType, identifierLabel: user.identifierLabel, role: user.role, active: user.active, createdAt: user.createdAt };
+  return { id: user.id, email: user.email || null, identifierType: user.identifierType, identifierLabel: user.identifierLabel, name: user.name || user.identifierLabel, avatarData: user.avatarData || null, role: user.role, active: user.active, createdAt: user.createdAt };
 }
 
 function asyncRoute(handler) {
