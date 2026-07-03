@@ -1,5 +1,6 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const decimalMoney = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const defaultCategories = ["Moradia", "Servicos", "Cartao", "Impostos", "Saude", "Equipe", "Outros"];
 
 function formatMoneyInput(value, forceDecimals = false) {
   const clean = String(value || "").replace(/[^\d,]/g, "");
@@ -14,7 +15,7 @@ function formatMoneyInput(value, forceDecimals = false) {
 function parseMoneyInput(value) {
   return Number(String(value || "0").replace(/\./g, "").replace(",", "."));
 }
-const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [] };
+const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [], categories: [] };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -105,6 +106,7 @@ async function loadData() {
   state.bills = data.bills;
   state.cards = data.cards;
   state.incomes = data.incomes || [];
+  state.categories = data.categories || [];
   render();
 }
 
@@ -160,6 +162,7 @@ function renderSubscription() {
   const companyButton = $('[data-workspace="Empresa"]');
   companyButton.classList.toggle("locked", !isPro);
   if (!isPro && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
+setCardDateDefaults();
   renderIncome();
   if (isPro) {
     let savedWorkspace = "Casa";
@@ -217,6 +220,7 @@ function render() {
   renderChartsView();
   renderLists();
   renderTable();
+  renderCategoryOptions();
   renderCards();
   renderForecast();
 }
@@ -390,6 +394,17 @@ function renderTable() {
   }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
+function renderCategoryOptions(selected = $("#billCategory").value) {
+  const names = [...defaultCategories, ...state.categories.map((category) => category.name)];
+  $("#billCategory").innerHTML = names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  if (names.includes(selected)) $("#billCategory").value = selected;
+}
+
+function setCardDateDefaults() {
+  const month = els.monthFilter.value || new Date().toISOString().slice(0, 7);
+  if (!$("#cardCloseDay").value) $("#cardCloseDay").value = `${month}-20`;
+  if (!$("#cardDueDay").value) $("#cardDueDay").value = `${month}-25`;
+}
 function renderCards() {
   const profile = els.profileFilter.value;
   const cards = state.cards.filter((card) => card.profile === profile);
@@ -624,12 +639,27 @@ $("#adminFeedbackList").addEventListener("submit", async (event) => {
   } catch (error) { setMessage(els.appMessage, error.message); }
 });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
-els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });
+els.monthFilter.addEventListener("change", () => { resetBillForm(); els.cardForm.reset(); setCardDateDefaults(); render(); });
 ["#upcomingList", "#reminderList"].forEach((selector) => $(selector).addEventListener("click", (event) => {
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);
 }));
-$("#monthlyIncome").addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); });
+["#billAmount", "#cardLimit"].forEach((selector) => {
+  $(selector).addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); });
+  $(selector).addEventListener("blur", (event) => { event.target.value = formatMoneyInput(event.target.value, true); });
+});
+$("#openCategoryDialog").addEventListener("click", () => { setMessage($("#categoryMessage")); $("#categoryDialog").showModal(); $("#categoryName").focus(); });
+$("#categoryForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#categoryMessage"));
+  try {
+    const category = await api("/api/categories", { method: "POST", body: JSON.stringify({ name: $("#categoryName").value }) });
+    state.categories.push(category);
+    renderCategoryOptions(category.name);
+    $("#categoryForm").reset();
+    setMessage($("#categoryMessage"), "Categoria criada para a sua conta.", true);
+    setTimeout(() => $("#categoryDialog").close(), 700);
+  } catch (error) { setMessage($("#categoryMessage"), error.message); }
+});$("#monthlyIncome").addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); });
 $("#monthlyIncome").addEventListener("blur", (event) => { event.target.value = formatMoneyInput(event.target.value, true); });$("#incomeForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -652,7 +682,7 @@ els.billForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (els.billForm.dataset.submitting === "true") return;
   const id = $("#billId").value;
-  const bill = { name: $("#billName").value.trim(), amount: Number($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value), recurring: $("#billRecurring").checked };
+  const bill = { name: $("#billName").value.trim(), amount: parseMoneyInput($("#billAmount").value), dueDate: $("#billDueDate").value, profile: $("#billProfile").value, category: $("#billCategory").value, status: $("#billStatus").value, tags: $("#billTags").value.split(",").map((tag) => tag.trim()).filter(Boolean), installments: Number($("#billInstallments").value), recurring: $("#billRecurring").checked };
   const submitButton = els.billForm.querySelector('button[type="submit"]');
   const originalLabel = submitButton.textContent;
   els.billForm.dataset.submitting = "true";
@@ -678,7 +708,7 @@ $("#billTable").addEventListener("click", async (event) => {
   const bill = state.bills.find((item) => item.id === button.dataset.id);
   if (!bill) return;
   if (button.dataset.action === "edit") {
-    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = bill.amount; $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; $("#billTags").value = (bill.tags || []).join(", "); $("#billInstallments").value = "1"; $("#billInstallments").disabled = true; $("#billRecurring").checked = bill.seriesType === "recurring"; $("#billRecurring").disabled = true; els.cancelEditButton.classList.remove("hidden"); return;
+    $("#billId").value = bill.id; $("#billName").value = bill.name; $("#billAmount").value = decimalMoney.format(bill.amount); $("#billDueDate").value = bill.dueDate; $("#billProfile").value = bill.profile; $("#billCategory").value = bill.category; $("#billStatus").value = bill.status; $("#billTags").value = (bill.tags || []).join(", "); $("#billInstallments").value = "1"; $("#billInstallments").disabled = true; $("#billRecurring").checked = bill.seriesType === "recurring"; $("#billRecurring").disabled = true; els.cancelEditButton.classList.remove("hidden"); return;
   }
   try {
     if (button.dataset.action === "delete") await api(`/api/bills/${bill.id}`, { method: "DELETE" });
@@ -690,8 +720,8 @@ $("#billTable").addEventListener("click", async (event) => {
 
 els.cardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const card = { name: $("#cardName").value.trim(), limit: Number($("#cardLimit").value), closeDay: Number($("#cardCloseDay").value), dueDay: Number($("#cardDueDay").value), profile: els.profileFilter.value };
-  try { await api("/api/cards", { method: "POST", body: JSON.stringify(card) }); await loadData(); els.cardForm.reset(); setMessage(els.appMessage, "Cartão salvo.", true); } catch (error) { setMessage(els.appMessage, error.message); }
+  const card = { name: $("#cardName").value.trim(), limit: parseMoneyInput($("#cardLimit").value), closeDay: Number($("#cardCloseDay").value.slice(-2)), dueDay: Number($("#cardDueDay").value.slice(-2)), profile: els.profileFilter.value };
+  try { await api("/api/cards", { method: "POST", body: JSON.stringify(card) }); await loadData(); els.cardForm.reset(); setCardDateDefaults(); setMessage(els.appMessage, "Cartão salvo.", true); } catch (error) { setMessage(els.appMessage, error.message); }
 });
 
 $("#cardList").addEventListener("click", async (event) => {
@@ -848,6 +878,7 @@ $("#adminPasswordForm").addEventListener("submit", async (event) => {
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 setWorkspace("Casa", false);
+setCardDateDefaults();
 if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("register");
 if (new URLSearchParams(location.search).get("reset_token")) $("#resetPasswordDialog").showModal();
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);

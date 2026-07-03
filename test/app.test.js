@@ -236,6 +236,23 @@ test("cria parcelas futuras com tags e clona contas recorrentes", async (context
   assert.deepEqual(cloned.body.tags, ["fixa"]);
 });
 
+test("isola categorias personalizadas por usuário", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const first = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
+  const second = await post(base, "/api/register", { identifier: "categoria2@example.com", password: "SenhaForte123" });
+  assert.equal((await post(base, "/api/categories", { name: "Educação" }, first.cookie)).status, 201);
+  assert.equal((await get(base, "/api/data", second.cookie)).body.categories.length, 0);
+  const foreignCategory = await post(base, "/api/bills", { name: "Curso", amount: 100, dueDate: "2026-07-10", profile: "Casa", category: "Educação", status: "pending", tags: [], installments: 1 }, second.cookie);
+  assert.equal(foreignCategory.status, 400);
+  assert.equal((await post(base, "/api/categories", { name: "Educação" }, second.cookie)).status, 201);
+  assert.equal((await post(base, "/api/bills", { name: "Curso", amount: 100, dueDate: "2026-07-10", profile: "Casa", category: "Educação", status: "pending", tags: [], installments: 1 }, second.cookie)).status, 201);
+  assert.deepEqual((await get(base, "/api/data", first.cookie)).body.categories.map((category) => category.name), ["Educação"]);
+});
 test("salva renda mensal isolada por usuário, mês e área", async (context) => {
   const storage = new MemoryStorage();
   const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });

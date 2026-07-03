@@ -18,6 +18,7 @@ import { runPushDispatch, startPushWorker, WebPushService } from "./push.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const profiles = ["Casa", "Empresa"];
 const categories = ["Moradia", "Servicos", "Cartao", "Impostos", "Saude", "Equipe", "Outros"];
+const categorySchema = z.object({ name: z.string().trim().min(2).max(40).regex(/^[\p{L}\p{N}][\p{L}\p{N} .&/-]*$/u) });
 const avatarSchema = z.string().max(350000).regex(/^data:image\/(jpeg|png|webp);base64,/).nullable().optional();
 const loginSchema = z.object({ identifier: z.string().min(5).max(320), password: z.string().min(8).max(72) });
 const registerSchema = loginSchema.extend({ name: z.string().trim().min(2).max(100).optional(), avatarData: avatarSchema });
@@ -32,7 +33,7 @@ const billSchema = z.object({
   amount: z.coerce.number().positive().max(999999999.99),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   profile: z.enum(profiles),
-  category: z.enum(categories),
+  category: z.string().trim().min(2).max(40),
   status: z.enum(["pending", "paid"]),
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
 });
@@ -101,6 +102,11 @@ export async function createApp(options = {}) {
     const access = await getAccess(user);
     if (profile === "Empresa" && access.plan !== "pro") throw serviceError("A área Empresa é exclusiva do plano Pro.", 402);
     return access;
+  };
+  const ensureCategoryAccess = async (userId, category) => {
+    if (categories.some((item) => item.toLocaleLowerCase("pt-BR") === category.toLocaleLowerCase("pt-BR"))) return;
+    const custom = await storage.listCategories(userId);
+    if (!custom.some((item) => item.name.toLocaleLowerCase("pt-BR") === category.toLocaleLowerCase("pt-BR"))) throw serviceError("Categoria personalizada inválida.", 400);
   };
   const ensureBillCapacity = async (user, entries, excludedId = null) => {
     const access = await getAccess(user);
@@ -194,7 +200,13 @@ export async function createApp(options = {}) {
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
     const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
     if (access.plan === "pro") return res.json(data);
-    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa") });
+    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa"), categories: data.categories || [] });
+  }));
+  app.post("/api/categories", authenticate, asyncRoute(async (req, res) => {
+    const { name } = categorySchema.parse(req.body);
+    const existing = [...categories.map((item) => ({ name: item })), ...await storage.listCategories(req.user.id)];
+    if (existing.some((item) => item.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) return res.status(409).json({ error: "Esta categoria já existe." });
+    return res.status(201).json(await storage.createCategory(req.user.id, name));
   }));
   app.put("/api/income", authenticate, asyncRoute(async (req, res) => {
     const input = incomeSchema.parse(req.body);
@@ -231,6 +243,7 @@ export async function createApp(options = {}) {
     if (input.recurring && input.installments > 1) return res.status(400).json({ error: "Conta fixa mensal não deve ter parcelas." });
     const access = await ensureProfileAccess(req.user, input.profile);
     if (input.installments > 1 && access.plan !== "pro") return res.status(402).json({ error: "Contas parceladas são exclusivas do plano Pro." });
+    await ensureCategoryAccess(req.user.id, input.category);
     const entries = createBillEntries(input);
     await ensureBillCapacity(req.user, entries);
     return res.status(201).json({ bills: await storage.createBills(req.user.id, entries) });
@@ -240,6 +253,7 @@ export async function createApp(options = {}) {
     if (!existing) return res.status(404).json({ error: "Conta não encontrada." });
     const input = billSchema.parse(req.body);
     await ensureProfileAccess(req.user, input.profile);
+    await ensureCategoryAccess(req.user.id, input.category);
     const entry = { ...input, seriesId: existing.seriesId, seriesType: existing.seriesType, installmentNumber: existing.installmentNumber, installmentTotal: existing.installmentTotal };
     await ensureBillCapacity(req.user, [entry], req.params.id);
     const bill = await storage.updateBill(req.user.id, req.params.id, entry);

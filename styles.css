@@ -126,6 +126,8 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(17, 94
 .form-panel { align-self: start; }
 .data-form { grid-template-columns: repeat(4, minmax(130px, 1fr)); align-items: end; }
 .data-form .primary-button, .data-form .ghost-button { align-self: end; }
+.category-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.category-field .small-button { white-space: nowrap; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; min-width: 760px; border-collapse: collapse; }
 th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -293,7 +295,7 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
   .forecast-row small { grid-column: 2 / -1; }
   .support-options { grid-template-columns: 1fr; }
   input, select, textarea { border-color: #8fa9a3; background: #fff; box-shadow: 0 0 0 1px rgba(17, 94, 89, .04); }
-  .client-manager, .client-profile-form, .income-form, .income-summary, .feedback-reply-form { grid-template-columns: 1fr; }
+  .client-manager, .client-profile-form, .income-form, .income-summary, .feedback-reply-form, .category-field { grid-template-columns: 1fr; }
   .category-row { grid-template-columns: 72px minmax(70px, 1fr) 90px; }
   .avatar-editor { grid-row: auto; }
 }

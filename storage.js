@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; this.feedbacks = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; this.feedbacks = []; this.categories = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -14,12 +14,14 @@ export class MemoryStorage {
   async updateUserPassword(id, passwordHash) { const user = this.users.find((item) => item.id === id); if (!user) return false; user.passwordHash = passwordHash; return true; }
   async createPasswordResetToken(userId, tokenHash, expiresAt) { this.passwordResetTokens = this.passwordResetTokens.filter((item) => item.userId !== userId); this.passwordResetTokens.push({ userId, tokenHash, expiresAt, usedAt: null }); }
   async consumePasswordResetToken(tokenHash) { const token = this.passwordResetTokens.find((item) => item.tokenHash === tokenHash && !item.usedAt && new Date(item.expiresAt) > new Date()); if (!token) return null; token.usedAt = new Date().toISOString(); return token.userId; }
-  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId), incomes: this.incomes.filter((item) => item.userId === userId) }; }
+  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId), incomes: this.incomes.filter((item) => item.userId === userId), categories: this.categories.filter((item) => item.userId === userId) }; }
   async getBill(userId, id) { return this.bills.find((item) => item.id === id && item.userId === userId) || null; }
   async createBill(userId, data) { const bill = { id: randomUUID(), userId, ...data }; this.bills.push(bill); return bill; }
   async createBills(userId, entries) { const bills = entries.map((data) => ({ id: randomUUID(), userId, ...data })); this.bills.push(...bills); return bills; }
   async updateBill(userId, id, data) { const index = this.bills.findIndex((item) => item.id === id && item.userId === userId); if (index < 0) return null; this.bills[index] = { ...this.bills[index], ...data }; return this.bills[index]; }
   async deleteBill(userId, id) { const before = this.bills.length; this.bills = this.bills.filter((item) => !(item.id === id && item.userId === userId)); return this.bills.length < before; }
+  async createCategory(userId, name) { const item = { id: randomUUID(), userId, name, createdAt: new Date().toISOString() }; this.categories.push(item); return item; }
+  async listCategories(userId) { return this.categories.filter((item) => item.userId === userId); }
   async createCard(userId, data) { const card = { id: randomUUID(), userId, ...data }; this.cards.push(card); return card; }
   async deleteCard(userId, id) { const before = this.cards.length; this.cards = this.cards.filter((item) => !(item.id === id && item.userId === userId)); return this.cards.length < before; }
   async upsertIncome(userId, data) { const index = this.incomes.findIndex((item) => item.userId === userId && item.month === data.month && item.profile === data.profile); const income = { id: index >= 0 ? this.incomes[index].id : randomUUID(), userId, ...data }; if (index >= 0) this.incomes[index] = income; else this.incomes.push(income); return income; }
@@ -109,14 +111,16 @@ class SupabaseStorage {
   }
 
   async listData(userId) {
-    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }, incomeResult] = await Promise.all([
+    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }, incomeResult, categoryResult] = await Promise.all([
       this.client.from("bills").select("*").eq("user_id", userId).order("due_date"),
       this.client.from("cards").select("id, name, credit_limit, close_day, due_day, profile").eq("user_id", userId).order("name"),
       this.client.from("monthly_incomes").select("id, user_id, month, profile, amount").eq("user_id", userId).order("month"),
+      this.client.from("user_categories").select("id, user_id, name, created_at").eq("user_id", userId).order("name"),
     ]);
     check(billsError); check(cardsError);
     const incomes = isMissingFeatureTable(incomeResult.error) ? [] : (check(incomeResult.error), incomeResult.data.map(mapIncome));
-    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes };
+    const categories = isMissingFeatureTable(categoryResult.error) ? [] : (check(categoryResult.error), categoryResult.data.map(mapCategory));
+    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes, categories };
   }
 
   async getBill(userId, id) {
@@ -149,6 +153,19 @@ class SupabaseStorage {
   async deleteBill(userId, id) {
     const { data, error } = await this.client.from("bills").delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle();
     check(error); return Boolean(data);
+  }
+
+  async createCategory(userId, name) {
+    const { data, error } = await this.client.from("user_categories").insert({ user_id: userId, name }).select("id, user_id, name, created_at").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de categorias personalizadas no Supabase.");
+    if (error?.code === "23505") { const duplicate = new Error("Esta categoria já existe."); duplicate.status = 409; throw duplicate; }
+    check(error); return mapCategory(data);
+  }
+
+  async listCategories(userId) {
+    const { data, error } = await this.client.from("user_categories").select("id, user_id, name, created_at").eq("user_id", userId).order("name");
+    if (isMissingFeatureTable(error)) return [];
+    check(error); return data.map(mapCategory);
   }
 
   async createCard(userId, data) {
@@ -308,6 +325,7 @@ class SupabaseStorage {
 function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.name, amount: data.amount, due_date: data.dueDate, profile: data.profile, category: data.category, status: data.status, tags: data.tags || [], series_id: data.seriesId || null, series_type: data.seriesType || "single", installment_number: data.installmentNumber || null, installment_total: data.installmentTotal || null }; }
 function toLegacyBillRow(row) { const { tags, series_id, series_type, installment_number, installment_total, ...legacy } = row; return legacy; }
 function mapBill(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, amount: Number(row.amount), dueDate: row.due_date || row.dueDate, profile: row.profile, category: row.category, status: row.status, tags: row.tags || [], seriesId: row.series_id || row.seriesId || null, seriesType: row.series_type || row.seriesType || "single", installmentNumber: row.installment_number || row.installmentNumber || null, installmentTotal: row.installment_total || row.installmentTotal || null }; }
+function mapCategory(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, createdAt: row.created_at || row.createdAt }; }
 function mapCard(row) { return { id: row.id, name: row.name, limit: Number(row.credit_limit), closeDay: row.close_day, dueDay: row.due_day, profile: row.profile }; }
 function mapIncome(row) { return { id: row.id, userId: row.user_id || row.userId, month: row.month, profile: row.profile, amount: Number(row.amount) }; }
 function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }

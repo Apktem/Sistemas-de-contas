@@ -153,10 +153,10 @@
             <form id="billForm" class="data-form">
               <input type="hidden" id="billId" />
               <label>Nome<input id="billName" type="text" placeholder="Ex: Aluguel" required /></label>
-              <label>Valor de cada parcela<input id="billAmount" type="number" min="0.01" step="0.01" required /></label>
+              <label>Valor de cada parcela<input id="billAmount" type="text" inputmode="decimal" placeholder="Ex: 600,00" autocomplete="off" required /></label>
               <label>Vencimento<input id="billDueDate" type="date" required /></label>
               <input id="billProfile" type="hidden" value="Casa" />
-              <label>Categoria<select id="billCategory"><option>Moradia</option><option>Servicos</option><option>Cartao</option><option>Impostos</option><option>Saude</option><option>Equipe</option><option>Outros</option></select></label>
+              <div class="category-field"><label>Categoria<select id="billCategory"></select></label><button id="openCategoryDialog" class="small-button" type="button">Nova categoria</button></div>
               <label>Status<select id="billStatus"><option value="pending">A vencer</option><option value="paid">Pago</option></select></label>
               <label>Tags<input id="billTags" type="text" maxlength="180" placeholder="Ex: fixa, casa" /></label>
               <label>Parcelas<input id="billInstallments" type="number" min="1" max="60" value="1" required /></label>
@@ -174,9 +174,9 @@
           <section class="panel form-panel"><div class="panel-title"><h2>Adicionar cartão</h2></div>
             <form id="cardForm" class="data-form">
               <label>Nome<input id="cardName" type="text" placeholder="Ex: Nubank" required /></label>
-              <label>Limite<input id="cardLimit" type="number" min="0.01" step="0.01" required /></label>
-              <label>Fechamento<input id="cardCloseDay" type="number" min="1" max="31" required /></label>
-              <label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" required /></label>
+              <label>Limite<input id="cardLimit" type="text" inputmode="decimal" placeholder="Ex: 5.000,00" autocomplete="off" required /></label>
+              <label>Data de fechamento<input id="cardCloseDay" type="date" required /></label>
+              <label>Data de vencimento<input id="cardDueDay" type="date" required /></label>
               <input id="cardProfile" type="hidden" value="Casa" />
               <button class="primary-button" type="submit">Salvar cartão</button>
             </form>
@@ -288,7 +288,12 @@
         </section>
       </section>
     </main>
-    <dialog id="forgotPasswordDialog" class="support-dialog" aria-labelledby="forgotPasswordTitle">
+    <dialog id="categoryDialog" class="support-dialog" aria-labelledby="categoryDialogTitle">
+      <div class="support-dialog-head"><div><p class="eyebrow">Organização</p><h2 id="categoryDialogTitle">Nova categoria</h2></div><button class="icon-button" data-close-dialog="categoryDialog" type="button" aria-label="Fechar">×</button></div>
+      <p>Esta categoria ficará disponível somente para a sua conta.</p>
+      <form id="categoryForm" class="login-form"><label>Nome da categoria<input id="categoryName" type="text" minlength="2" maxlength="40" placeholder="Ex: Educação" required /></label><button class="primary-button" type="submit">Criar categoria</button></form>
+      <p id="categoryMessage" class="form-message" aria-live="polite"></p>
+    </dialog>    <dialog id="forgotPasswordDialog" class="support-dialog" aria-labelledby="forgotPasswordTitle">
       <div class="support-dialog-head"><div><p class="eyebrow">Acesso</p><h2 id="forgotPasswordTitle">Recuperar senha</h2></div><button class="icon-button" data-close-dialog="forgotPasswordDialog" type="button" aria-label="Fechar">×</button></div>
       <p>Informe o e-mail cadastrado. Enviaremos um link seguro válido por 30 minutos.</p>
       <form id="forgotPasswordForm" class="login-form"><label>E-mail<input id="forgotPasswordEmail" type="email" autocomplete="email" required /></label><button class="primary-button" type="submit">Enviar link de recuperação</button></form>

@@ -50,6 +50,15 @@ create table if not exists public.monthly_incomes (
 
 create index if not exists monthly_incomes_user_month_idx on public.monthly_incomes(user_id, month);
 
+create table if not exists public.user_categories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  name text not null check (char_length(name) between 2 and 40),
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+create index if not exists user_categories_user_idx on public.user_categories(user_id);
 create table if not exists public.cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -139,6 +148,7 @@ create index if not exists feedbacks_user_created_idx on public.feedbacks(user_i
 alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
+alter table public.user_categories enable row level security;
 alter table public.monthly_incomes enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.notification_preferences enable row level security;
@@ -147,6 +157,6 @@ alter table public.push_subscriptions enable row level security;
 alter table public.password_reset_tokens enable row level security;
 alter table public.feedbacks enable row level security;
 
-revoke all on public.users, public.bills, public.cards, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
+revoke all on public.users, public.bills, public.cards, public.user_categories, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
 revoke all on public.password_reset_tokens from anon, authenticated;
 revoke all on public.feedbacks from anon, authenticated;
