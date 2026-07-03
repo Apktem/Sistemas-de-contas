@@ -243,12 +243,14 @@ test("salva renda mensal isolada por usuário, mês e área", async (context) =>
   await once(server, "listening");
   context.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
-  const first = await post(base, "/api/register", { identifier: "renda1@example.com", password: "SenhaForte123" });
+  const first = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
   const second = await post(base, "/api/register", { identifier: "renda2@example.com", password: "SenhaForte123" });
-  const saved = await put(base, "/api/income", { month: "2026-07", profile: "Casa", amount: 5000 }, first.cookie);
-  assert.equal(saved.status, 200);
-  assert.equal(saved.body.amount, 5000);
-  assert.equal((await get(base, "/api/data", first.cookie)).body.incomes.length, 1);
+  const home = await put(base, "/api/income", { month: "2026-07", profile: "Casa", amount: 10000 }, first.cookie);
+  const company = await put(base, "/api/income", { month: "2026-07", profile: "Empresa", amount: 20000 }, first.cookie);
+  assert.equal(home.status, 200);
+  assert.equal(company.status, 200);
+  const incomes = (await get(base, "/api/data", first.cookie)).body.incomes;
+  assert.deepEqual(incomes.map((income) => [income.profile, income.amount]), [["Casa", 10000], ["Empresa", 20000]]);
   assert.equal((await get(base, "/api/data", second.cookie)).body.incomes.length, 0);
 });
 test("envia cada notificação push uma unica vez", async () => {

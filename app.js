@@ -280,6 +280,11 @@ function sumByStatus(bills, status) {
 }
 
 function renderIncome() {
+  const isCompany = els.profileFilter.value === "Empresa";
+  $("#incomePanelTitle").textContent = isCompany ? "Receita mensal da Empresa" : "Renda mensal da Casa";
+  $("#incomePanelHelp").textContent = isCompany ? "Informe a receita destinada às contas da Empresa." : "Informe a renda destinada às contas da Casa.";
+  $("#incomeFieldLabel").textContent = isCompany ? "Receita da Empresa" : "Renda da Casa";
+  $("#incomeAmountLabel").textContent = isCompany ? "Receita da Empresa" : "Renda da Casa";
   const income = state.incomes.find((item) => item.month === els.monthFilter.value && item.profile === els.profileFilter.value);
   const amount = Number(income?.amount || 0);
   const expenses = getFilteredBills().reduce((sum, bill) => sum + Number(bill.amount), 0);
