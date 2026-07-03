@@ -251,7 +251,14 @@ test("salva renda mensal isolada por usuário, mês e área", async (context) =>
   assert.equal(company.status, 200);
   const incomes = (await get(base, "/api/data", first.cookie)).body.incomes;
   assert.deepEqual(incomes.map((income) => [income.profile, income.amount]), [["Casa", 10000], ["Empresa", 20000]]);
-  assert.equal((await get(base, "/api/data", second.cookie)).body.incomes.length, 0);
+  const freeIncome = await put(base, "/api/income", { month: "2026-07", profile: "Casa", amount: 3000 }, second.cookie);
+  const aboveFreeLimit = await put(base, "/api/income", { month: "2026-07", profile: "Casa", amount: 3000.01 }, second.cookie);
+  const freeCompany = await put(base, "/api/income", { month: "2026-07", profile: "Empresa", amount: 1000 }, second.cookie);
+  assert.equal(freeIncome.status, 200);
+  assert.equal(aboveFreeLimit.status, 402);
+  assert.match(aboveFreeLimit.body.error, /R\$ 3\.000/);
+  assert.equal(freeCompany.status, 402);
+  assert.deepEqual((await get(base, "/api/data", second.cookie)).body.incomes.map((income) => [income.profile, income.amount]), [["Casa", 3000]]);
 });
 test("envia cada notificação push uma unica vez", async () => {
   const storage = new MemoryStorage();

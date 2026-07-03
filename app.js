@@ -88,8 +88,8 @@ window.addEventListener("appinstalled", () => {
 async function loadData() {
   const data = await api("/api/data");
   state.bills = data.bills;
-+
-+  render();
+  state.cards = data.cards;
+  state.incomes = data.incomes || [];
   render();
 }
 
@@ -127,7 +127,7 @@ function renderSubscription() {
   const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada", pix_pending: "Aguardando Pix", pix_authorized: "Pix confirmado", pix_rejected: "Pix não aprovado", pix_cancelled: "Pix cancelado" };
   $("#subscriptionTitle").textContent = isPro ? "Plano Pro" : "Plano Grátis";
   const dateLabel = subscription.billingType === "pix" ? "acesso liberado até" : "próxima cobrança em";
-  $("#subscriptionDescription").textContent = isPro ? `Casa e Empresa com recursos ilimitados${subscription.nextPaymentDate ? ` · ${dateLabel} ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Área Casa com até 10 contas por mês, 1 cartão, painel e lembretes.";
+  $("#subscriptionDescription").textContent = isPro ? `Casa e Empresa com recursos ilimitados${subscription.nextPaymentDate ? ` · ${dateLabel} ${new Date(subscription.nextPaymentDate).toLocaleDateString("pt-BR")}` : ""}.` : "Área Casa com até 10 contas por mês, 1 cartão, painel, lembretes e renda mensal de até R$ 3.000.";
   $("#subscriptionBadge").textContent = subscription.status === "pix_authorized" && !isPro ? "Pix expirado" : labels[subscription.status] || (isPro ? "Ativa" : "Grátis");
   $("#subscriptionBadge").className = `badge ${isPro ? "active" : String(subscription.status || "").includes("pending") ? "pending" : "inactive"}`;
   $("#billingEmail").value = subscription.payerEmail || (state.user.identifierType === "email" ? state.user.identifierLabel : "");
@@ -145,7 +145,7 @@ function renderSubscription() {
   const companyButton = $('[data-workspace="Empresa"]');
   companyButton.classList.toggle("locked", !isPro);
   if (!isPro && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
-if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("register");
+  renderIncome();
   if (isPro) {
     let savedWorkspace = "Casa";
     try { savedWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
@@ -282,7 +282,8 @@ function sumByStatus(bills, status) {
 function renderIncome() {
   const isCompany = els.profileFilter.value === "Empresa";
   $("#incomePanelTitle").textContent = isCompany ? "Receita mensal da Empresa" : "Renda mensal da Casa";
-  $("#incomePanelHelp").textContent = isCompany ? "Informe a receita destinada às contas da Empresa." : "Informe a renda destinada às contas da Casa.";
+  const isPro = state.subscription?.plan === "pro";
+  $("#incomePanelHelp").textContent = isCompany ? "Informe a receita destinada às contas da Empresa." : isPro ? "Informe a renda destinada às contas da Casa." : "Plano Grátis: renda mensal de até R$ 3.000. Acima disso, assine o Pro.";
   $("#incomeFieldLabel").textContent = isCompany ? "Receita da Empresa" : "Renda da Casa";
   $("#incomeAmountLabel").textContent = isCompany ? "Receita da Empresa" : "Renda da Casa";
   const income = state.incomes.find((item) => item.month === els.monthFilter.value && item.profile === els.profileFilter.value);
