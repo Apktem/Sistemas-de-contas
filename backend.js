@@ -25,6 +25,8 @@ const forgotPasswordSchema = z.object({ email: z.string().trim().email().max(320
 const resetPasswordSchema = z.object({ token: z.string().min(40).max(200), password: z.string().min(8).max(72) });
 const adminProfileSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.string().trim().email().max(320).optional(), avatarData: avatarSchema });
 const adminPasswordSchema = z.object({ password: z.string().min(8).max(72) });
+const feedbackSchema = z.object({ rating: z.coerce.number().int().min(1).max(10), message: z.string().trim().min(3).max(2000) });
+const feedbackReplySchema = z.object({ response: z.string().trim().min(2).max(2000) });
 const billSchema = z.object({
   name: z.string().trim().min(2).max(160),
   amount: z.coerce.number().positive().max(999999999.99),
@@ -320,7 +322,15 @@ export async function createApp(options = {}) {
     return res.status(200).json({ received: true });
   }));
 
+  app.get("/api/feedback", authenticate, asyncRoute(async (req, res) => res.json({ feedbacks: await storage.listFeedback(req.user.id) })));
+  app.post("/api/feedback", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createFeedback(req.user.id, feedbackSchema.parse(req.body)))));
+
   app.get("/api/admin/overview", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await storage.adminOverview())));
+  app.get("/api/admin/feedback", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json({ feedbacks: await storage.adminFeedback() })));
+  app.patch("/api/admin/feedback/:id", authenticate, adminOnly, asyncRoute(async (req, res) => {
+    const feedback = await storage.replyFeedback(req.params.id, feedbackReplySchema.parse(req.body).response);
+    return feedback ? res.json(feedback) : res.status(404).json({ error: "Feedback não encontrado." });
+  }));
   app.post("/api/admin/notifications/run", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json(await runPushDispatch(storage, push))));
   app.get("/api/admin/users", authenticate, adminOnly, asyncRoute(async (_req, res) => res.json({ users: await storage.adminUsers() })));
   app.get("/api/admin/users/:id", authenticate, adminOnly, asyncRoute(async (req, res) => {

@@ -124,6 +124,18 @@ create table if not exists public.notification_deliveries (
 
 delete from public.notification_deliveries where channel = 'whatsapp';
 
+create table if not exists public.feedbacks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  rating integer not null check (rating between 1 and 10),
+  message text not null check (char_length(message) between 3 and 2000),
+  response text,
+  responded_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists feedbacks_user_created_idx on public.feedbacks(user_id, created_at desc);
+
 alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
@@ -133,6 +145,8 @@ alter table public.notification_preferences enable row level security;
 alter table public.notification_deliveries enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.password_reset_tokens enable row level security;
+alter table public.feedbacks enable row level security;
 
 revoke all on public.users, public.bills, public.cards, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
 revoke all on public.password_reset_tokens from anon, authenticated;
+revoke all on public.feedbacks from anon, authenticated;

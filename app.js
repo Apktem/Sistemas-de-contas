@@ -1,5 +1,5 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null };
+const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [] };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -297,7 +297,7 @@ function renderIncome() {
   $("#incomeRemaining").textContent = money.format(remaining);
   $("#incomeRemaining").classList.toggle("negative", remaining < 0);
   $("#incomePercent").textContent = amount > 0 ? `${percent}% comprometido` : "Renda não informada";
-  $("#incomeProgress").style.width = `${Math.min(percent, 100)}%`;
+  $("#incomeProgress").style.setProperty("--progress", Math.min(percent, 100));
   $("#incomeProgress").classList.toggle("warning", percent >= 80 && percent <= 100);
   $("#incomeProgress").classList.toggle("danger", percent > 100);
 }
@@ -426,8 +426,9 @@ function switchView(view, title) {
   $$(".view").forEach((item) => item.classList.remove("active-view"));
   $(`#${view}View`).classList.add("active-view");
   $("#pageTitle").textContent = title;
-  els.financeFilters.classList.toggle("hidden", view === "admin" || view === "subscription");
+  els.financeFilters.classList.toggle("hidden", view === "admin" || view === "subscription" || view === "feedback");
   if (view === "admin") loadAdmin();
+  if (view === "feedback") loadFeedback();
   if (view === "subscription") loadSubscription();
   if (view === "reminders") loadNotificationPreferences();
 }
@@ -445,6 +446,7 @@ async function loadAdmin() {
     $("#adminFreeUsers").textContent = state.adminUsers.length - proUsers;
     $("#adminInactiveUsers").textContent = state.adminUsers.length - activeUsers;
     renderAdminUsers();
+    await loadAdminFeedback();
   } catch (error) { setMessage(els.appMessage, error.message); }
 }
 
@@ -470,6 +472,42 @@ async function showAdminUser(id) {
   $("#adminUserDetail").classList.remove("hidden");
 }
 
+function ratingFace(rating) {
+  if (rating <= 2) return "😞";
+  if (rating <= 4) return "🙁";
+  if (rating <= 6) return "😐";
+  if (rating <= 8) return "🙂";
+  return "😄";
+}
+
+function updateFeedbackRating() {
+  const rating = Number($("#feedbackRating").value);
+  $("#feedbackFace").textContent = ratingFace(rating);
+  $("#feedbackRatingValue").textContent = `${rating} de 10`;
+}
+
+async function loadFeedback() {
+  try {
+    state.feedbacks = (await api("/api/feedback")).feedbacks;
+    renderFeedbackHistory();
+  } catch (error) { setMessage($("#feedbackFormMessage"), error.message); }
+}
+
+function renderFeedbackHistory() {
+  $("#feedbackHistory").innerHTML = state.feedbacks.length ? state.feedbacks.map((feedback) => `<article class="feedback-item"><div class="feedback-meta"><span class="rating-face" aria-hidden="true">${ratingFace(feedback.rating)}</span><strong>${feedback.rating}/10</strong><time>${new Date(feedback.createdAt).toLocaleDateString("pt-BR")}</time><span class="badge ${feedback.response ? "active" : "pending"}">${feedback.response ? "Respondido" : "Recebido"}</span></div><p>${escapeHtml(feedback.message)}</p>${feedback.response ? `<div class="feedback-response"><strong>Resposta da equipe RicoXP</strong><p>${escapeHtml(feedback.response)}</p></div>` : ""}</article>`).join("") : '<p class="muted empty-state">Você ainda não enviou nenhum feedback.</p>';
+}
+
+async function loadAdminFeedback() {
+  if (state.user?.role !== "admin") return;
+  try {
+    state.adminFeedbacks = (await api("/api/admin/feedback")).feedbacks;
+    renderAdminFeedback();
+  } catch (error) { $("#adminFeedbackList").innerHTML = `<p class="form-message">${escapeHtml(error.message)}</p>`; }
+}
+
+function renderAdminFeedback() {
+  $("#adminFeedbackList").innerHTML = state.adminFeedbacks.length ? state.adminFeedbacks.map((feedback) => `<article class="feedback-item admin-feedback-item"><div class="feedback-meta"><span class="rating-face" aria-hidden="true">${ratingFace(feedback.rating)}</span><strong>${feedback.rating}/10</strong><span>${escapeHtml(feedback.user?.name || feedback.user?.identifierLabel || "Cliente")}</span><small>${escapeHtml(feedback.user?.email || feedback.user?.identifierLabel || "")}</small><time>${new Date(feedback.createdAt).toLocaleString("pt-BR")}</time></div><p>${escapeHtml(feedback.message)}</p><form class="feedback-reply-form" data-feedback-reply="${feedback.id}"><label>Resposta<textarea rows="3" minlength="2" maxlength="2000" required>${escapeHtml(feedback.response || "")}</textarea></label><button class="${feedback.response ? "ghost-button" : "primary-button"}" type="submit">${feedback.response ? "Atualizar resposta" : "Responder cliente"}</button></form></article>`).join("") : '<p class="muted empty-state">Nenhum feedback recebido.</p>';
+}
 function exportCsv() {
   const rows = [["Nome", "Perfil", "Categoria", "Valor", "Vencimento", "Status"]];
   getFilteredBills().forEach((bill) => rows.push([bill.name, bill.profile, bill.category, bill.amount, bill.dueDate, statusLabel(billSituation(bill))]));
@@ -547,6 +585,28 @@ $("#installAppButton").addEventListener("click", async () => {
   const choice = await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
   hideInstallPrompt(choice.outcome !== "accepted");
+});
+$("#feedbackRating").addEventListener("input", updateFeedbackRating);
+$("#feedbackForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#feedbackFormMessage"));
+  try {
+    const feedback = await api("/api/feedback", { method: "POST", body: JSON.stringify({ rating: Number($("#feedbackRating").value), message: $("#feedbackMessage").value }) });
+    state.feedbacks.unshift(feedback);
+    $("#feedbackMessage").value = "";
+    renderFeedbackHistory();
+    setMessage($("#feedbackFormMessage"), "Feedback enviado. Obrigado por ajudar a melhorar o RicoXP.", true);
+  } catch (error) { setMessage($("#feedbackFormMessage"), error.message); }
+});
+$("#refreshFeedback").addEventListener("click", loadAdminFeedback);
+$("#adminFeedbackList").addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-feedback-reply]");
+  if (!form) return;
+  event.preventDefault();
+  try {
+    await api(`/api/admin/feedback/${form.dataset.feedbackReply}`, { method: "PATCH", body: JSON.stringify({ response: form.querySelector("textarea").value }) });
+    await loadAdminFeedback();
+    setMessage(els.appMessage, "Resposta enviada ao cliente.", true);
+  } catch (error) { setMessage(els.appMessage, error.message); }
 });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); });

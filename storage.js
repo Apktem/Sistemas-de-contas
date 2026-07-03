@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; this.feedbacks = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -34,6 +34,10 @@ export class MemoryStorage {
   async deletePushSubscription(userId, endpoint) { const before = this.pushSubscriptions.length; this.pushSubscriptions = this.pushSubscriptions.filter((item) => !(item.userId === userId && item.endpoint === endpoint)); return this.pushSubscriptions.length < before; }
   async getNotificationDelivery(billId, scheduledFor) { return this.notificationDeliveries.find((item) => item.billId === billId && item.scheduledFor === scheduledFor) || null; }
   async recordNotificationDelivery(data) { const index = this.notificationDeliveries.findIndex((item) => item.billId === data.billId && item.scheduledFor === data.scheduledFor); const item = { id: index >= 0 ? this.notificationDeliveries[index].id : randomUUID(), ...data }; if (index >= 0) this.notificationDeliveries[index] = item; else this.notificationDeliveries.push(item); return item; }
+  async createFeedback(userId, data) { const item = { id: randomUUID(), userId, ...data, response: null, respondedAt: null, createdAt: new Date().toISOString() }; this.feedbacks.unshift(item); return item; }
+  async listFeedback(userId) { return this.feedbacks.filter((item) => item.userId === userId); }
+  async adminFeedback() { return this.feedbacks.map((item) => ({ ...item, user: publicUser(this.users.find((user) => user.id === item.userId) || {}) })); }
+  async replyFeedback(id, response) { const item = this.feedbacks.find((feedback) => feedback.id === id); if (!item) return null; item.response = response; item.respondedAt = new Date().toISOString(); return item; }
   async adminOverview() { return { users: this.users.length, activeUsers: this.users.filter((user) => user.active).length, proUsers: this.subscriptions.filter(isActiveSubscription).length, bills: this.bills.length, totalAmount: this.bills.reduce((sum, bill) => sum + Number(bill.amount), 0) }; }
   async adminUsers() { return this.users.map((user) => ({ ...publicUser(user), plan: user.role === "admin" || this.subscriptions.some((item) => item.userId === user.id && isActiveSubscription(item)) ? "pro" : "free", subscriptionStatus: this.subscriptions.find((item) => item.userId === user.id)?.status || null })); }
   async adminUser(id) { return (await this.adminUsers()).find((user) => user.id === id) || null; }
@@ -239,6 +243,30 @@ class SupabaseStorage {
     check(error); return mapNotificationDelivery(saved);
   }
 
+  async createFeedback(userId, input) {
+    const { data, error } = await this.client.from("feedbacks").insert({ user_id: userId, rating: input.rating, message: input.message }).select("*").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de feedbacks no Supabase.");
+    check(error); return mapFeedback(data);
+  }
+
+  async listFeedback(userId) {
+    const { data, error } = await this.client.from("feedbacks").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de feedbacks no Supabase.");
+    check(error); return data.map(mapFeedback);
+  }
+
+  async adminFeedback() {
+    const { data, error } = await this.client.from("feedbacks").select("*, users(name,email,identifier_label)").order("created_at", { ascending: false });
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de feedbacks no Supabase.");
+    check(error); return data.map((row) => ({ ...mapFeedback(row), user: { name: row.users?.name || row.users?.identifier_label, identifierLabel: row.users?.identifier_label, email: row.users?.email } }));
+  }
+
+  async replyFeedback(id, response) {
+    const { data, error } = await this.client.from("feedbacks").update({ response, responded_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de feedbacks no Supabase.");
+    check(error); return data ? mapFeedback(data) : null;
+  }
+
   async adminOverview() {
     const [usersResult, activeResult, billsResult, subscriptionsResult] = await Promise.all([
       this.client.from("users").select("*", { count: "exact", head: true }),
@@ -285,6 +313,7 @@ function mapIncome(row) { return { id: row.id, userId: row.user_id || row.userId
 function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }
 function mapNotificationPreferences(row) { return { userId: row.user_id, pushEnabled: Boolean(row.push_enabled), reminderDays: Number(row.reminder_days || 2), updatedAt: row.updated_at || null }; }
 function mapNotificationDelivery(row) { return { id: row.id, userId: row.user_id, billId: row.bill_id, scheduledFor: row.scheduled_for, status: row.status, providerMessageId: row.provider_message_id, error: row.error }; }
+function mapFeedback(row) { return { id: row.id, userId: row.user_id || row.userId, rating: Number(row.rating), message: row.message, response: row.response || null, respondedAt: row.responded_at || row.respondedAt || null, createdAt: row.created_at || row.createdAt }; }
 function mapUser(row, includePassword = false) {
   const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, name: row.name || row.identifier_label, avatarData: row.avatar_data || null, role: row.role, active: Boolean(row.active), createdAt: row.created_at };
   if (includePassword) user.passwordHash = row.password_hash;

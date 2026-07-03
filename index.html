@@ -94,6 +94,7 @@
           <button class="nav-item" data-view="bills" type="button">Contas</button>
           <button class="nav-item" data-view="cards" type="button">Cartões</button>
           <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
+          <button class="nav-item" data-view="feedback" type="button">Feedback</button>
           <button class="nav-item" data-view="subscription" type="button">Assinatura</button>
           <button id="adminNav" class="nav-item hidden" data-view="admin" type="button">Administração</button>
         </nav>
@@ -196,6 +197,20 @@
           <section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section>
         </section>
 
+        <section id="feedbackView" class="view">
+          <div class="feedback-grid">
+            <section class="panel">
+              <div class="panel-title"><div><h2>Conte como está sua experiência</h2><p class="muted">Sua avaliação ajuda a melhorar o RicoXP.</p></div></div>
+              <form id="feedbackForm" class="feedback-form">
+                <label class="rating-label">Satisfação <span><strong id="feedbackFace" aria-hidden="true">🙂</strong><output id="feedbackRatingValue" for="feedbackRating">8 de 10</output></span><input id="feedbackRating" type="range" min="1" max="10" value="8" /></label>
+                <label>Mensagem<textarea id="feedbackMessage" rows="6" minlength="3" maxlength="2000" placeholder="Conte o que funcionou bem ou o que podemos melhorar" required></textarea></label>
+                <button class="primary-button" type="submit">Enviar feedback</button>
+              </form>
+              <p id="feedbackFormMessage" class="form-message" aria-live="polite"></p>
+            </section>
+            <section class="panel"><div class="panel-title"><h2>Minhas mensagens</h2><span>Respostas da equipe</span></div><div id="feedbackHistory" class="feedback-list"></div></section>
+          </div>
+        </section>
         <section id="subscriptionView" class="view">
           <div class="plan-grid">
             <article class="plan-option">
@@ -244,6 +259,10 @@
           </div>
           <section class="panel"><div class="panel-title"><h2>Usuários</h2><button id="refreshAdmin" class="ghost-button" type="button">Atualizar</button></div>
             <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Conta</th><th>Perfil</th><th>Plano</th><th>Cadastro</th><th>Status</th><th></th></tr></thead><tbody id="adminUserTable"></tbody></table></div>
+          </section>
+          <section class="panel admin-feedback-panel">
+            <div class="panel-title"><div><h2>Feedbacks dos clientes</h2><p class="muted">Avaliações e mensagens recebidas pelo sistema.</p></div><button id="refreshFeedback" class="ghost-button" type="button">Atualizar</button></div>
+            <div id="adminFeedbackList" class="feedback-list"></div>
           </section>
           <section id="adminUserDetail" class="panel hidden">
             <div class="panel-title"><div><h2 id="adminDetailTitle">Gerenciar cliente</h2><p class="muted">Dados da conta, sem acesso ao financeiro.</p></div><button id="closeAdminDetail" class="ghost-button" type="button">Fechar</button></div>

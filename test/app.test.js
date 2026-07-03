@@ -260,6 +260,27 @@ test("salva renda mensal isolada por usuário, mês e área", async (context) =>
   assert.equal(freeCompany.status, 402);
   assert.deepEqual((await get(base, "/api/data", second.cookie)).body.incomes.map((income) => [income.profile, income.amount]), [["Casa", 3000]]);
 });
+test("cliente envia feedback e administrador responde sem expor mensagens de terceiros", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const admin = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
+  const client = await post(base, "/api/register", { identifier: "feedback@example.com", password: "SenhaForte123" });
+  const created = await post(base, "/api/feedback", { rating: 9, message: "Painel muito útil." }, client.cookie);
+  assert.equal(created.status, 201);
+  assert.equal((await get(base, "/api/feedback", client.cookie)).body.feedbacks.length, 1);
+  assert.equal((await get(base, "/api/feedback", admin.cookie)).body.feedbacks.length, 0);
+  const inbox = await get(base, "/api/admin/feedback", admin.cookie);
+  assert.equal(inbox.body.feedbacks[0].rating, 9);
+  assert.equal(inbox.body.feedbacks[0].user.identifierLabel, "feedback@example.com");
+  const reply = await patch(base, `/api/admin/feedback/${created.body.id}`, { response: "Obrigado pela avaliação!" }, admin.cookie);
+  assert.equal(reply.status, 200);
+  assert.equal((await get(base, "/api/feedback", client.cookie)).body.feedbacks[0].response, "Obrigado pela avaliação!");
+  assert.equal((await get(base, "/api/admin/feedback", client.cookie)).status, 403);
+});
 test("envia cada notificação push uma unica vez", async () => {
   const storage = new MemoryStorage();
   const user = await storage.createUser({ email: "alerta@example.com", lookup: "alerta@example.com", identifierType: "email", identifierLabel: "alerta@example.com", passwordHash: "hash", role: "user" });
