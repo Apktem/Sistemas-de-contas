@@ -6,6 +6,14 @@ const publicFiles = ["manifest.webmanifest", "service-worker.js", "robots.txt", 
 
 export default defineConfig({
   base: "./",
+  build: {
+    rollupOptions: {
+      input: {
+        app: resolve("index.html"),
+        landing: resolve("landing.html"),
+      },
+    },
+  },
   plugins: [
     {
       name: "copy-pwa-files",

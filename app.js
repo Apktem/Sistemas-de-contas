@@ -144,6 +144,7 @@ function renderSubscription() {
   const companyButton = $('[data-workspace="Empresa"]');
   companyButton.classList.toggle("locked", !isPro);
   if (!isPro && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
+if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("register");
   if (isPro) {
     let savedWorkspace = "Casa";
     try { savedWorkspace = localStorage.getItem("ricoxp-workspace") || "Casa"; } catch {}
@@ -674,6 +675,7 @@ $("#adminPasswordForm").addEventListener("submit", async (event) => {
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 setWorkspace("Casa", false);
+if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("register");
 if (new URLSearchParams(location.search).get("reset_token")) $("#resetPasswordDialog").showModal();
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});

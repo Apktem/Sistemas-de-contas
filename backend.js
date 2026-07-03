@@ -363,11 +363,14 @@ export async function createApp(options = {}) {
   if (hasBuild) {
     app.use(express.static(distRoot, { index: false, maxAge: production ? "1h" : 0 }));
   } else {
-    ["app.js", "styles.css", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
+    ["app.js", "styles.css", "landing.css", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
       app.get(`/${file}`, (_req, res) => res.sendFile(path.join(root, file)));
     });
   }
-  app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(hasBuild ? distRoot : root, "index.html")) : next());
+  const pageRoot = hasBuild ? distRoot : root;
+  app.get("/", (_req, res) => res.sendFile(path.join(pageRoot, "landing.html")));
+  app.get(["/login", "/login/"], (_req, res) => res.sendFile(path.join(pageRoot, "index.html")));
+  app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(pageRoot, "index.html")) : next());
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: "Revise os dados informados." });
     if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Conta já cadastrada." });

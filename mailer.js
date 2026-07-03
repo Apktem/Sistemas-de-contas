@@ -15,7 +15,7 @@ export class SupportMailer {
       error.status = 503;
       throw error;
     }
-    const resetUrl = `${this.siteUrl}/?reset_token=${encodeURIComponent(token)}`;
+    const resetUrl = `${this.siteUrl}/login?reset_token=${encodeURIComponent(token)}`;
     await this.transport.sendMail({
       from: this.from,
       to: email,

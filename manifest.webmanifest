@@ -1,10 +1,10 @@
 {
   "name": "RicoXP Gestão Financeira",
   "short_name": "RicoXP",
-  "id": "/",
+  "id": "/login",
   "description": "Controle financeiro pessoal e empresarial para contas, cartões, vencimentos e parcelamentos.",
   "lang": "pt-BR",
-  "start_url": "/?source=pwa",
+  "start_url": "/login?source=pwa",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f5f7f8",
