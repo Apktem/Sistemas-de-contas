@@ -1,4 +1,19 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const decimalMoney = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function formatMoneyInput(value, forceDecimals = false) {
+  const clean = String(value || "").replace(/[^\d,]/g, "");
+  if (!clean) return "";
+  const comma = clean.indexOf(",");
+  const integerDigits = (comma >= 0 ? clean.slice(0, comma) : clean).replace(/\D/g, "") || "0";
+  const integer = Number(integerDigits).toLocaleString("pt-BR");
+  if (comma >= 0) return `${integer},${clean.slice(comma + 1).replace(/\D/g, "").slice(0, 2)}`;
+  return forceDecimals ? `${integer},00` : integer;
+}
+
+function parseMoneyInput(value) {
+  return Number(String(value || "0").replace(/\./g, "").replace(",", "."));
+}
 const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [] };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
@@ -291,7 +306,7 @@ function renderIncome() {
   const expenses = getFilteredBills().reduce((sum, bill) => sum + Number(bill.amount), 0);
   const remaining = amount - expenses;
   const percent = amount > 0 ? Math.round((expenses / amount) * 100) : 0;
-  $("#monthlyIncome").value = amount || "";
+  $("#monthlyIncome").value = amount ? decimalMoney.format(amount) : "";
   $("#incomeAmount").textContent = money.format(amount);
   $("#incomeExpenses").textContent = money.format(expenses);
   $("#incomeRemaining").textContent = money.format(remaining);
@@ -614,10 +629,11 @@ els.monthFilter.addEventListener("change", () => { resetBillForm(); render(); })
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);
 }));
-$("#incomeForm").addEventListener("submit", async (event) => {
+$("#monthlyIncome").addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); });
+$("#monthlyIncome").addEventListener("blur", (event) => { event.target.value = formatMoneyInput(event.target.value, true); });$("#incomeForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    const income = await api("/api/income", { method: "PUT", body: JSON.stringify({ month: els.monthFilter.value, profile: els.profileFilter.value, amount: Number($("#monthlyIncome").value) }) });
+    const income = await api("/api/income", { method: "PUT", body: JSON.stringify({ month: els.monthFilter.value, profile: els.profileFilter.value, amount: parseMoneyInput($("#monthlyIncome").value) }) });
     const index = state.incomes.findIndex((item) => item.month === income.month && item.profile === income.profile);
     if (index >= 0) state.incomes[index] = income; else state.incomes.push(income);
     renderIncome();
