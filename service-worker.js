@@ -1,4 +1,4 @@
-const CACHE_NAME = "gestao-financeira-cache-v11";
+const CACHE_NAME = "gestao-financeira-cache-v12";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
@@ -19,13 +19,13 @@ self.addEventListener("push", (event) => {
     icon: "/brand-icon-192",
     badge: "/brand-icon-32",
     tag: data.tag || "finance-reminder",
-    data: { url: data.url || "/?abrir=lembretes" },
+    data: { url: data.url || "/login?abrir=lembretes" },
     actions: [{ action: "open", title: "Abrir sistema" }],
   }));
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || "/?abrir=lembretes", self.location.origin).href;
+  const target = new URL(event.notification.data?.url || "/login?abrir=lembretes", self.location.origin).href;
   event.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
     const existing = windows.find((client) => client.url.startsWith(self.location.origin));
     if (existing) return existing.focus().then(() => existing.navigate(target));

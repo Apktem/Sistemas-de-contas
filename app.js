@@ -196,8 +196,10 @@ function billSituation(bill) {
 
 function render() {
   renderMetrics();
-+
-+  renderLists();
+  renderChart();
+  renderIncome();
+  renderCategoryChart();
+  renderChartsView();
   renderLists();
   renderTable();
   renderCards();
