@@ -90,6 +90,7 @@
         </div>
         <nav class="nav-list" aria-label="Áreas">
           <button class="nav-item active" data-view="dashboard" type="button">Painel</button>
+          <button class="nav-item" data-view="charts" type="button">Gráficos</button>
           <button class="nav-item" data-view="bills" type="button">Contas</button>
           <button class="nav-item" data-view="cards" type="button">Cartões</button>
           <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
@@ -123,7 +124,7 @@
             <article class="metric late"><span>Vencidas</span><strong id="metricOverdue">R$ 0,00</strong><small id="metricOverdueCount">0 contas</small></article>
           </div>
           <div class="dashboard-grid">
-            <section class="panel"><div class="panel-title"><h2>Situação das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><canvas id="statusChart" width="280" height="280" aria-label="Gráfico de contas pagas, a vencer e vencidas"></canvas></div><div id="statusLegend" class="chart-legend"></div></section>
+            <section class="panel"><div class="panel-title"><h2>Situação das contas</h2><span id="paidPercent">0% pago</span></div><div class="chart-wrap"><div id="statusDonut" class="status-donut" role="img" aria-label="Gráfico de contas pagas, a vencer e vencidas"><div><strong id="statusDonutPercent">0%</strong><span>pago</span></div></div></div><div id="statusLegend" class="chart-legend"></div></section>
             <section class="panel"><div class="panel-title"><h2>Próximos vencimentos</h2><span>7 dias</span></div><div id="upcomingList" class="stack-list"></div></section>
           </div>
           <div class="dashboard-grid insights-grid">
@@ -133,6 +134,19 @@
           <section class="panel"><div class="panel-title"><h2>Previsão dos próximos meses</h2><span>6 meses</span></div><div id="forecastList" class="forecast-list"></div></section>
         </section>
 
+        <section id="chartsView" class="view">
+          <div class="chart-summary-grid">
+            <article class="chart-metric"><div id="chartTotalRing" class="radial-chart total"><div><strong id="chartTotalPercent">0%</strong></div></div><span>Total do mês</span><strong id="chartTotalValue">R$ 0,00</strong><small id="chartTotalCount">0 contas</small></article>
+            <article class="chart-metric"><div id="chartPaidRing" class="radial-chart paid"><div><strong id="chartPaidPercent">0%</strong></div></div><span>Pago</span><strong id="chartPaidValue">R$ 0,00</strong><small id="chartPaidCount">0 contas</small></article>
+            <article class="chart-metric"><div id="chartPendingRing" class="radial-chart pending"><div><strong id="chartPendingPercent">0%</strong></div></div><span>A vencer</span><strong id="chartPendingValue">R$ 0,00</strong><small id="chartPendingCount">0 contas</small></article>
+            <article class="chart-metric"><div id="chartOverdueRing" class="radial-chart overdue"><div><strong id="chartOverduePercent">0%</strong></div></div><span>Vencidas</span><strong id="chartOverdueValue">R$ 0,00</strong><small id="chartOverdueCount">0 contas</small></article>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel"><div class="panel-title"><h2>Gastos por categoria</h2><span id="chartsCategoryTotal">R$ 0,00</span></div><div id="chartsCategoryChart" class="category-chart"></div></section>
+            <section class="panel"><div class="panel-title"><h2>Resumo do mês</h2><span>Valores por situação</span></div><div id="chartsStatusBars" class="status-bars"></div></section>
+          </div>
+          <section class="panel"><div class="panel-title"><h2>Previsão dos próximos meses</h2><span>6 meses</span></div><div id="chartsForecastList" class="forecast-list"></div></section>
+        </section>
         <section id="billsView" class="view">
           <section class="panel form-panel"><div class="panel-title"><h2>Adicionar conta</h2></div>
             <form id="billForm" class="data-form">

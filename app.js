@@ -224,8 +224,6 @@ function setMetric(items, valueSelector, countSelector) {
 }
 
 function renderChart() {
-  const canvas = $("#statusChart");
-  const ctx = canvas.getContext("2d");
   const bills = getFilteredBills();
   const values = [
     { value: sumByStatus(bills, "paid"), color: "#209869" },
@@ -233,26 +231,46 @@ function renderChart() {
     { value: sumByStatus(bills, "overdue"), color: "#cf3f3f" },
   ];
   const total = values.reduce((sum, entry) => sum + entry.value, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#eef3f2";
-  ctx.beginPath(); ctx.arc(140, 140, 105, 0, Math.PI * 2); ctx.fill();
-  let start = -Math.PI / 2;
-  values.filter((entry) => entry.value > 0).forEach((entry) => {
-    const angle = total ? (entry.value / total) * Math.PI * 2 : 0;
-    ctx.beginPath(); ctx.moveTo(140, 140); ctx.arc(140, 140, 105, start, start + angle); ctx.closePath(); ctx.fillStyle = entry.color; ctx.fill(); start += angle;
-  });
-  ctx.beginPath(); ctx.arc(140, 140, 62, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
-  const paidValue = values[0].value;
-  const percent = total ? Math.round((paidValue / total) * 100) : 0;
-  ctx.fillStyle = "#17211f"; ctx.font = "700 22px Arial"; ctx.textAlign = "center"; ctx.fillText(`${percent}%`, 140, 135);
-  ctx.font = "12px Arial"; ctx.fillStyle = "#64716e"; ctx.fillText("pago", 140, 154);
-  $("#paidPercent").textContent = `${percent}% pago`;
+  const paidPercent = total ? Math.round((values[0].value / total) * 100) : 0;
+  const paidEnd = total ? (values[0].value / total) * 360 : 0;
+  const pendingEnd = total ? paidEnd + (values[1].value / total) * 360 : 0;
+  const donut = $("#statusDonut");
+  donut.style.background = total ? `conic-gradient(#209869 0deg ${paidEnd}deg, #d8911c ${paidEnd}deg ${pendingEnd}deg, #cf3f3f ${pendingEnd}deg 360deg)` : "#eef3f2";
+  donut.setAttribute("aria-label", `${money.format(values[0].value)} pago, ${money.format(values[1].value)} a vencer e ${money.format(values[2].value)} vencido`);
+  $("#statusDonutPercent").textContent = `${paidPercent}%`;
+  $("#paidPercent").textContent = `${paidPercent}% pago`;
   $("#statusLegend").innerHTML = [
     `<span><i style="background:#115e59"></i>Total ${money.format(total)}</span>`,
     `<span><i style="background:#209869"></i>Pago ${money.format(values[0].value)}</span>`,
     `<span><i style="background:#d8911c"></i>A vencer ${money.format(values[1].value)}</span>`,
     `<span><i style="background:#cf3f3f"></i>Vencido ${money.format(values[2].value)}</span>`,
   ].join("");
+}
+
+function renderChartsView() {
+  const bills = getFilteredBills();
+  const groups = [
+    { key: "Total", items: bills, color: "#115e59" },
+    { key: "Paid", items: bills.filter((bill) => billSituation(bill) === "paid"), color: "#209869" },
+    { key: "Pending", items: bills.filter((bill) => billSituation(bill) === "pending"), color: "#d8911c" },
+    { key: "Overdue", items: bills.filter((bill) => billSituation(bill) === "overdue"), color: "#cf3f3f" },
+  ];
+  const total = groups[0].items.reduce((sum, bill) => sum + Number(bill.amount), 0);
+  groups.forEach((group, index) => {
+    const value = group.items.reduce((sum, bill) => sum + Number(bill.amount), 0);
+    const percent = total ? Math.round((value / total) * 100) : 0;
+    const displayPercent = index === 0 && total ? 100 : percent;
+    $("#chart" + group.key + "Ring").style.setProperty("--ring-value", displayPercent);
+    $("#chart" + group.key + "Percent").textContent = `${displayPercent}%`;
+    $("#chart" + group.key + "Value").textContent = money.format(value);
+    $("#chart" + group.key + "Count").textContent = `${group.items.length} ${group.items.length === 1 ? "conta" : "contas"}`;
+  });
+  $("#chartsStatusBars").innerHTML = groups.slice(1).map((group) => {
+    const value = group.items.reduce((sum, bill) => sum + Number(bill.amount), 0);
+    const percent = total ? Math.round((value / total) * 100) : 0;
+    const label = { Paid: "Pago", Pending: "A vencer", Overdue: "Vencido" }[group.key];
+    return `<div class="status-bar-row"><span>${label}</span><div><i style="width:${percent}%;background:${group.color}"></i></div><strong>${money.format(value)}</strong></div>`;
+  }).join("");
 }
 
 function sumByStatus(bills, status) {
@@ -277,14 +295,20 @@ function renderIncome() {
 }
 
 function renderCategoryChart() {
+  renderCategoryInto("#categoryChart", "#categoryTotal");
+  renderCategoryInto("#chartsCategoryChart", "#chartsCategoryTotal");
+}
+
+function renderCategoryInto(chartSelector, totalSelector) {
   const colors = { Moradia: "#115e59", Servicos: "#18aee8", Cartao: "#7968c8", Impostos: "#cf3f3f", Saude: "#209869", Equipe: "#d8911c", Outros: "#64716e" };
   const totals = getFilteredBills().reduce((groups, bill) => ({ ...groups, [bill.category]: (groups[bill.category] || 0) + Number(bill.amount) }), {});
   const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((sum, entry) => sum + entry[1], 0);
   const max = Math.max(...entries.map((entry) => entry[1]), 1);
-  $("#categoryTotal").textContent = money.format(total);
-  $("#categoryChart").innerHTML = entries.length ? entries.map(([category, value]) => `<div class="category-row"><span>${escapeHtml(category)}</span><div><i style="width:${Math.round((value / max) * 100)}%;background:${colors[category] || colors.Outros}"></i></div><strong>${money.format(value)}</strong></div>`).join("") : '<p class="muted">Cadastre contas para visualizar as categorias.</p>';
+  $(totalSelector).textContent = money.format(total);
+  $(chartSelector).innerHTML = entries.length ? entries.map(([category, value]) => `<div class="category-row"><span>${escapeHtml(category)}</span><div><i style="width:${Math.round((value / max) * 100)}%;background:${colors[category] || colors.Outros}"></i></div><strong>${money.format(value)}</strong></div>`).join("") : '<p class="muted">Cadastre contas para visualizar as categorias.</p>';
 }
+
 function renderLists() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -326,7 +350,9 @@ function renderForecast() {
     return { key, count: bills.length, total: bills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
   });
   const max = Math.max(...months.map((item) => item.total), 1);
-  $("#forecastList").innerHTML = months.map((item) => `<div class="forecast-row"><span>${new Date(`${item.key}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span><div class="forecast-track"><i style="width:${Math.round((item.total / max) * 100)}%"></i></div><strong>${money.format(item.total)}</strong><small>${item.count} ${item.count === 1 ? "conta" : "contas"}</small></div>`).join("");
+  const html = months.map((item) => `<div class="forecast-row"><span>${new Date(`${item.key}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span><div class="forecast-track"><i style="width:${Math.round((item.total / max) * 100)}%"></i></div><strong>${money.format(item.total)}</strong><small>${item.count} ${item.count === 1 ? "conta" : "contas"}</small></div>`).join("");
+  $("#forecastList").innerHTML = html;
+  $("#chartsForecastList").innerHTML = html;
 }
 
 function renderTable() {
