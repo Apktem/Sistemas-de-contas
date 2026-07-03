@@ -1,5 +1,5 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const state = { user: null, bills: [], cards: [], adminUsers: [], subscription: null, notificationPreferences: null };
+const state = { user: null, bills: [], cards: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -36,7 +36,8 @@ function showAuth() {
 
 async function enterApp(user) {
   state.user = user;
-  $("#userBadge").textContent = `${user.identifierLabel}${user.role === "admin" ? " · Administrador" : ""}`;
+  $("#userBadge").textContent = `${user.name || user.identifierLabel}${user.role === "admin" ? " · Administrador" : ""}`;
+  $("#userAvatar").src = user.avatarData || "/brand-icon-192";
   $("#adminNav").classList.toggle("hidden", user.role !== "admin");
   els.loginScreen.classList.add("hidden");
   els.appScreen.classList.remove("hidden");
@@ -285,7 +286,8 @@ function renderTable() {
     const fixedTag = bill.seriesType === "recurring" ? '<span class="tag">Fixa mensal</span>' : "";
     const tags = `${fixedTag}${bill.tags?.length ? bill.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("") : fixedTag ? "" : '<span class="muted">-</span>'}`;
     const cloneButton = bill.seriesType === "single" ? `<button class="small-button" data-action="clone" data-id="${bill.id}" type="button">Clonar mês</button>` : "";
-    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
+    const payClass = bill.status === "paid" ? "" : " action-pay";
+    return `<tr><td>${escapeHtml(bill.name)}</td><td><div class="tag-list">${tags}</div></td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td><span class="badge ${situation}">${statusLabel(situation)}</span></td><td><div class="row-actions"><button class="small-button${payClass}" data-action="toggle" data-id="${bill.id}" type="button">${bill.status === "paid" ? "Reabrir" : "Pagar"}</button>${cloneButton}<button class="small-button action-edit" data-action="edit" data-id="${bill.id}" type="button">Editar</button><button class="small-button action-delete" data-action="delete" data-id="${bill.id}" type="button">Excluir</button></div></td></tr>`;
   }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
@@ -349,26 +351,38 @@ function switchView(view, title) {
 async function loadAdmin() {
   if (state.user?.role !== "admin") return;
   try {
-    const [overview, usersData] = await Promise.all([api("/api/admin/overview"), api("/api/admin/users")]);
+    const usersData = await api("/api/admin/users");
     state.adminUsers = usersData.users;
-    $("#adminUsers").textContent = overview.users;
-    $("#adminActiveText").textContent = `${overview.activeUsers} ativos`;
-    $("#adminProUsers").textContent = overview.proUsers;
-    $("#adminBills").textContent = overview.bills;
-    $("#adminTotal").textContent = money.format(Number(overview.totalAmount));
+    const activeUsers = state.adminUsers.filter((user) => user.active).length;
+    const proUsers = state.adminUsers.filter((user) => user.plan === "pro").length;
+    $("#adminUsers").textContent = state.adminUsers.length;
+    $("#adminActiveText").textContent = `${activeUsers} ativos`;
+    $("#adminProUsers").textContent = proUsers;
+    $("#adminFreeUsers").textContent = state.adminUsers.length - proUsers;
+    $("#adminInactiveUsers").textContent = state.adminUsers.length - activeUsers;
     renderAdminUsers();
   } catch (error) { setMessage(els.appMessage, error.message); }
 }
 
 function renderAdminUsers() {
-  $("#adminUserTable").innerHTML = state.adminUsers.map((user) => `<tr><td>${escapeHtml(user.identifierLabel)}</td><td>${user.role === "admin" ? "Administrador" : "Usuário"}</td><td><span class="badge ${user.plan === "pro" ? "active" : "inactive"}">${user.plan === "pro" ? "Pro" : "Grátis"}</span></td><td>${new Date(user.createdAt).toLocaleDateString("pt-BR")}</td><td>${user.billCount}</td><td>${money.format(Number(user.totalAmount))}</td><td><span class="badge ${user.active ? "active" : "inactive"}">${user.active ? "Ativo" : "Inativo"}</span></td><td><div class="row-actions"><button class="small-button" data-admin-view="${user.id}" type="button">Ver financeiro</button>${user.id === state.user.id ? "" : `<button class="small-button" data-admin-status="${user.id}" data-active="${!user.active}" type="button">${user.active ? "Desativar" : "Ativar"}</button>`}</div></td></tr>`).join("");
+  $("#adminUserTable").innerHTML = state.adminUsers.map((user) => `<tr><td><div class="admin-client-cell"><img src="${user.avatarData || "/brand-icon-192"}" alt="" /><strong>${escapeHtml(user.name || user.identifierLabel)}</strong></div></td><td>${escapeHtml(user.identifierLabel)}</td><td>${user.role === "admin" ? "Administrador" : "Usuário"}</td><td><span class="badge ${user.plan === "pro" ? "active" : "inactive"}">${user.plan === "pro" ? "Pro" : "Grátis"}</span></td><td>${new Date(user.createdAt).toLocaleDateString("pt-BR")}</td><td><span class="badge ${user.active ? "active" : "inactive"}">${user.active ? "Ativo" : "Inativo"}</span></td><td><div class="row-actions"><button class="small-button action-edit" data-admin-manage="${user.id}" type="button">Gerenciar cliente</button>${user.id === state.user.id ? "" : `<button class="small-button" data-admin-status="${user.id}" data-active="${!user.active}" type="button">${user.active ? "Desativar" : "Ativar"}</button>`}</div></td></tr>`).join("");
 }
 
 async function showAdminUser(id) {
-  const data = await api(`/api/admin/users/${id}/data`);
-  $("#adminDetailTitle").textContent = `Financeiro de ${data.user.identifierLabel}`;
-  const billRows = data.bills.length ? data.bills.map((bill) => `<tr><td>${escapeHtml(bill.name)}</td><td>${bill.profile}</td><td>${money.format(Number(bill.amount))}</td><td>${formatDate(bill.dueDate)}</td><td>${statusLabel(billSituation(bill))}</td></tr>`).join("") : '<tr><td colspan="5">Nenhum lançamento.</td></tr>';
-  $("#adminDetailContent").innerHTML = `<div class="admin-detail-grid"><div><h3>Contas</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${billRows}</tbody></table></div></div><div><h3>Cartões</h3><p>${data.cards.length} cartão(ões) cadastrado(s).</p></div></div>`;
+  const { user } = await api(`/api/admin/users/${id}`);
+  state.selectedAdminUser = user;
+  $("#adminDetailTitle").textContent = `Gerenciar ${user.name || user.identifierLabel}`;
+  $("#adminAvatarPreview").src = user.avatarData || "/brand-icon-192";
+  $("#adminAvatar").value = "";
+  $("#adminClientName").value = user.name || user.identifierLabel;
+  $("#adminClientEmail").value = user.email || "";
+  $("#adminClientEmail").disabled = user.identifierType !== "email";
+  $("#adminClientIdentifier").value = user.identifierType === "email" ? "E-mail" : `CPF: ${user.identifierLabel}`;
+  $("#adminClientPlan").value = user.plan === "pro" ? "Plano Pro" : "Plano Grátis";
+  $("#adminClientStatus").value = user.active ? "Ativo" : "Inativo";
+  $("#adminClientPassword").value = "";
+  $("#adminClientPasswordConfirm").value = "";
+  setMessage($("#adminClientMessage"));
   $("#adminUserDetail").classList.remove("hidden");
 }
 
@@ -404,12 +418,37 @@ els.registerForm.addEventListener("submit", async (event) => {
   event.preventDefault(); setMessage(els.authMessage);
   if ($("#registerPassword").value !== $("#registerPasswordConfirm").value) { setMessage(els.authMessage, "As senhas não coincidem."); return; }
   try {
-    const result = await api("/api/register", { method: "POST", body: JSON.stringify({ identifier: $("#registerIdentifier").value, password: $("#registerPassword").value }) });
+    const avatarData = await resizeProfileImage($("#registerAvatar").files[0]);
+    const result = await api("/api/register", { method: "POST", body: JSON.stringify({ name: $("#registerName").value, identifier: $("#registerIdentifier").value, avatarData, password: $("#registerPassword").value }) });
     await enterApp(result.user);
   } catch (error) { setMessage(els.authMessage, error.message); }
 });
 
 $("#logoutButton").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }).catch(() => {}); showAuth(); });
+$("#forgotPasswordButton").addEventListener("click", () => {
+  $("#forgotPasswordEmail").value = $("#loginIdentifier").value.includes("@") ? $("#loginIdentifier").value : "";
+  setMessage($("#forgotPasswordMessage"));
+  $("#forgotPasswordDialog").showModal();
+});
+$$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close()));
+$("#forgotPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#forgotPasswordMessage"));
+  try {
+    const result = await api("/api/password/forgot", { method: "POST", body: JSON.stringify({ email: $("#forgotPasswordEmail").value }) });
+    setMessage($("#forgotPasswordMessage"), result.message, true);
+  } catch (error) { setMessage($("#forgotPasswordMessage"), error.message); }
+});
+$("#resetPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#resetPasswordMessage"));
+  if ($("#resetPassword").value !== $("#resetPasswordConfirm").value) return setMessage($("#resetPasswordMessage"), "As senhas não coincidem.");
+  const token = new URLSearchParams(location.search).get("reset_token");
+  try {
+    const result = await api("/api/password/reset", { method: "POST", body: JSON.stringify({ token, password: $("#resetPassword").value }) });
+    history.replaceState({}, "", location.pathname);
+    setMessage($("#resetPasswordMessage"), result.message, true);
+    setTimeout(() => $("#resetPasswordDialog").close(), 1200);
+  } catch (error) { setMessage($("#resetPasswordMessage"), error.message); }
+});
 $("#dismissInstallButton").addEventListener("click", () => hideInstallPrompt(true));
 $("#installAppButton").addEventListener("click", async () => {
   if (!deferredInstallPrompt) {
@@ -551,6 +590,42 @@ $("#copyPixCode").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("#pixCode").value); setMessage(els.appMessage, "Código Pix copiado.", true); }
   catch { $("#pixCode").select(); document.execCommand("copy"); setMessage(els.appMessage, "Código Pix copiado.", true); }
 });
+
+function resizeProfileImage(file) {
+  if (!file) return Promise.resolve(null);
+  if (!file.type.match(/^image\/(jpeg|png|webp)$/) || file.size > 5 * 1024 * 1024) return Promise.reject(new Error("Escolha uma imagem JPG, PNG ou WebP de até 5 MB."));
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff"; context.fillRect(0, 0, size, size);
+      const scale = Math.max(size / image.width, size / image.height);
+      const width = image.width * scale; const height = image.height * scale;
+      context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      resolve(canvas.toDataURL("image/jpeg", .82));
+      URL.revokeObjectURL(image.src);
+    };
+    image.onerror = () => reject(new Error("Não foi possível ler a foto escolhida."));
+    image.src = URL.createObjectURL(file);
+  });
+}
+document.querySelectorAll("[data-support-open]").forEach((button) => button.addEventListener("click", () => {
+  $("#supportFeedback").textContent = "";
+  $("#supportDialog").showModal();
+}));
+$("#closeSupportDialog").addEventListener("click", () => $("#supportDialog").close());
+$("#supportDialog").addEventListener("click", (event) => {
+  if (event.target === $("#supportDialog")) $("#supportDialog").close();
+});
+$("#copySupportEmail").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText("contato@ricoxp.com");
+    setMessage($("#supportFeedback"), "Endereço copiado.", true);
+  } catch { setMessage($("#supportFeedback"), "E-mail: contato@ricoxp.com", true); }
+});
 $("#syncSubscription").addEventListener("click", async () => {
   try { await loadSubscription(true); await loadData(); setMessage(els.appMessage, "Situação da assinatura atualizada.", true); } catch (error) { setMessage(els.appMessage, error.message); }
 });
@@ -562,16 +637,43 @@ $("#cancelSubscription").addEventListener("click", async () => {
 $("#refreshAdmin").addEventListener("click", loadAdmin);
 $("#closeAdminDetail").addEventListener("click", () => $("#adminUserDetail").classList.add("hidden"));
 $("#adminUserTable").addEventListener("click", async (event) => {
-  const viewButton = event.target.closest("[data-admin-view]");
+  const viewButton = event.target.closest("[data-admin-manage]");
   const statusButton = event.target.closest("[data-admin-status]");
   try {
-    if (viewButton) await showAdminUser(viewButton.dataset.adminView);
+    if (viewButton) await showAdminUser(viewButton.dataset.adminManage);
     if (statusButton) { await api(`/api/admin/users/${statusButton.dataset.adminStatus}/status`, { method: "PATCH", body: JSON.stringify({ active: statusButton.dataset.active === "true" }) }); await loadAdmin(); }
   } catch (error) { setMessage(els.appMessage, error.message); }
+});
+$("#adminAvatar").addEventListener("change", async () => {
+  try { $("#adminAvatarPreview").src = await resizeProfileImage($("#adminAvatar").files[0]) || state.selectedAdminUser?.avatarData || "/brand-icon-192"; }
+  catch (error) { setMessage($("#adminClientMessage"), error.message); }
+});
+$("#adminProfileForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#adminClientMessage"));
+  if (!state.selectedAdminUser) return;
+  try {
+    const avatarData = $("#adminAvatar").files[0] ? await resizeProfileImage($("#adminAvatar").files[0]) : state.selectedAdminUser.avatarData;
+    const body = { name: $("#adminClientName").value, avatarData };
+    if (state.selectedAdminUser.identifierType === "email") body.email = $("#adminClientEmail").value;
+    await api(`/api/admin/users/${state.selectedAdminUser.id}`, { method: "PATCH", body: JSON.stringify(body) });
+    await loadAdmin(); await showAdminUser(state.selectedAdminUser.id);
+    setMessage($("#adminClientMessage"), "Dados do cliente atualizados.", true);
+  } catch (error) { setMessage($("#adminClientMessage"), error.message); }
+});
+$("#adminPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); setMessage($("#adminClientMessage"));
+  if (!state.selectedAdminUser) return;
+  if ($("#adminClientPassword").value !== $("#adminClientPasswordConfirm").value) return setMessage($("#adminClientMessage"), "As senhas não coincidem.");
+  try {
+    const result = await api(`/api/admin/users/${state.selectedAdminUser.id}/password`, { method: "PATCH", body: JSON.stringify({ password: $("#adminClientPassword").value }) });
+    $("#adminClientPassword").value = ""; $("#adminClientPasswordConfirm").value = "";
+    setMessage($("#adminClientMessage"), result.message, true);
+  } catch (error) { setMessage($("#adminClientMessage"), error.message); }
 });
 
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 setWorkspace("Casa", false);
+if (new URLSearchParams(location.search).get("reset_token")) $("#resetPasswordDialog").showModal();
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});

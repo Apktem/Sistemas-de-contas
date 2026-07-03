@@ -63,24 +63,27 @@
             <label>E-mail ou CPF<input id="loginIdentifier" type="text" autocomplete="username" required /></label>
             <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
             <button class="primary-button" type="submit">Entrar</button>
+            <button id="forgotPasswordButton" class="text-button" type="button">Esqueci minha senha</button>
           </form>
           <form id="registerForm" class="login-form hidden">
+            <label>Nome completo<input id="registerName" type="text" autocomplete="name" minlength="2" maxlength="100" required /></label>
             <label>E-mail ou CPF<input id="registerIdentifier" type="text" autocomplete="username" required /></label>
+            <label>Foto de perfil <span class="optional-label">opcional</span><input id="registerAvatar" type="file" accept="image/jpeg,image/png,image/webp" /></label>
             <label>Senha<input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
             <label>Confirmar senha<input id="registerPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>
             <button class="primary-button" type="submit">Criar minha conta</button>
           </form>
           <p id="authMessage" class="form-message" aria-live="polite"></p>
-          <a class="support-link login-support" href="mailto:contato@ricoxp.com?subject=Suporte%20RicoXP&body=Ol%C3%A1%2C%20equipe%20RicoXP!%0A%0APreciso%20de%20ajuda%20com%3A%0A%0A%0AE-mail%20da%20minha%20conta%3A%0A%0AObrigado!">
+          <button class="support-link login-support" data-support-open type="button">
             <span aria-hidden="true">✉</span> Falar com o suporte
-          </a>
+          </button>
         </div>
       </section>
     </main>
 
     <main id="appScreen" class="app-shell hidden">
       <aside class="sidebar">
-        <div class="sidebar-head"><div><p class="eyebrow">Financeiro</p><h2>Controle mensal</h2></div><span id="userBadge" class="user-badge"></span></div>
+        <div class="sidebar-head"><img id="userAvatar" class="user-avatar" src="/brand-icon-192" alt="Foto do cliente" /><div><p class="eyebrow">Financeiro</p><h2>Controle mensal</h2><span id="userBadge" class="user-badge"></span></div></div>
         <div class="workspace-switch" aria-label="Escolha a área financeira">
           <button class="workspace-button active" data-workspace="Casa" type="button">Casa</button>
           <button class="workspace-button" data-workspace="Empresa" type="button">Empresa <span class="workspace-plan">Pro</span></button>
@@ -94,9 +97,9 @@
           <button id="adminNav" class="nav-item hidden" data-view="admin" type="button">Administração</button>
         </nav>
         <div class="sidebar-actions">
-          <a class="support-link" href="mailto:contato@ricoxp.com?subject=Suporte%20RicoXP&body=Ol%C3%A1%2C%20equipe%20RicoXP!%0A%0APreciso%20de%20ajuda%20com%3A%0A%0A%0AE-mail%20da%20minha%20conta%3A%0A%0AObrigado!">
+          <button class="support-link" data-support-open type="button">
             <span aria-hidden="true">✉</span> Suporte por e-mail
-          </a>
+          </button>
           <button id="logoutButton" class="ghost-button" type="button">Sair</button>
         </div>
       </aside>
@@ -217,17 +220,63 @@
         <section id="adminView" class="view">
           <div class="summary-grid admin-summary">
             <article class="metric"><span>Usuários</span><strong id="adminUsers">0</strong><small id="adminActiveText">0 ativos</small></article>
-            <article class="metric paid"><span>Assinantes Pro</span><strong id="adminProUsers">0</strong><small>assinaturas ativas</small></article>
-            <article class="metric due"><span>Contas financeiras</span><strong id="adminBills">0</strong><small>lançamentos</small></article>
-            <article class="metric late"><span>Valor gerenciado</span><strong id="adminTotal">R$ 0,00</strong><small>total cadastrado</small></article>
+            <article class="metric paid"><span>Plano Pro</span><strong id="adminProUsers">0</strong><small>clientes</small></article>
+            <article class="metric due"><span>Plano Grátis</span><strong id="adminFreeUsers">0</strong><small>clientes</small></article>
+            <article class="metric late"><span>Inativos</span><strong id="adminInactiveUsers">0</strong><small>clientes</small></article>
           </div>
           <section class="panel"><div class="panel-title"><h2>Usuários</h2><button id="refreshAdmin" class="ghost-button" type="button">Atualizar</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Conta</th><th>Perfil</th><th>Plano</th><th>Cadastro</th><th>Lançamentos</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody id="adminUserTable"></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Conta</th><th>Perfil</th><th>Plano</th><th>Cadastro</th><th>Status</th><th></th></tr></thead><tbody id="adminUserTable"></tbody></table></div>
           </section>
-          <section id="adminUserDetail" class="panel hidden"><div class="panel-title"><h2 id="adminDetailTitle">Detalhes</h2><button id="closeAdminDetail" class="ghost-button" type="button">Fechar</button></div><div id="adminDetailContent"></div></section>
+          <section id="adminUserDetail" class="panel hidden">
+            <div class="panel-title"><div><h2 id="adminDetailTitle">Gerenciar cliente</h2><p class="muted">Dados da conta, sem acesso ao financeiro.</p></div><button id="closeAdminDetail" class="ghost-button" type="button">Fechar</button></div>
+            <div class="client-manager">
+              <form id="adminProfileForm" class="client-profile-form">
+                <div class="avatar-editor"><img id="adminAvatarPreview" src="/brand-icon-192" alt="Foto do cliente" /><label>Alterar foto<input id="adminAvatar" type="file" accept="image/jpeg,image/png,image/webp" /></label></div>
+                <label>Nome completo<input id="adminClientName" type="text" minlength="2" maxlength="100" required /></label>
+                <label>E-mail<input id="adminClientEmail" type="email" /></label>
+                <label>Identificação<input id="adminClientIdentifier" type="text" readonly /></label>
+                <label>Plano atual<input id="adminClientPlan" type="text" readonly /></label>
+                <label>Status<input id="adminClientStatus" type="text" readonly /></label>
+                <button class="primary-button" type="submit">Salvar dados do cliente</button>
+              </form>
+              <form id="adminPasswordForm" class="password-admin-form">
+                <h3>Redefinir senha</h3><p class="muted">Defina uma senha temporária com pelo menos 8 caracteres.</p>
+                <label>Nova senha<input id="adminClientPassword" type="password" minlength="8" autocomplete="new-password" required /></label>
+                <label>Confirmar nova senha<input id="adminClientPasswordConfirm" type="password" minlength="8" autocomplete="new-password" required /></label>
+                <button class="ghost-button" type="submit">Atualizar senha</button>
+              </form>
+            </div>
+            <p id="adminClientMessage" class="form-message" aria-live="polite"></p>
+          </section>
         </section>
       </section>
     </main>
+    <dialog id="forgotPasswordDialog" class="support-dialog" aria-labelledby="forgotPasswordTitle">
+      <div class="support-dialog-head"><div><p class="eyebrow">Acesso</p><h2 id="forgotPasswordTitle">Recuperar senha</h2></div><button class="icon-button" data-close-dialog="forgotPasswordDialog" type="button" aria-label="Fechar">×</button></div>
+      <p>Informe o e-mail cadastrado. Enviaremos um link seguro válido por 30 minutos.</p>
+      <form id="forgotPasswordForm" class="login-form"><label>E-mail<input id="forgotPasswordEmail" type="email" autocomplete="email" required /></label><button class="primary-button" type="submit">Enviar link de recuperação</button></form>
+      <p id="forgotPasswordMessage" class="form-message" aria-live="polite"></p>
+    </dialog>
+    <dialog id="resetPasswordDialog" class="support-dialog" aria-labelledby="resetPasswordTitle">
+      <div class="support-dialog-head"><div><p class="eyebrow">Segurança</p><h2 id="resetPasswordTitle">Cadastrar nova senha</h2></div><button class="icon-button" data-close-dialog="resetPasswordDialog" type="button" aria-label="Fechar">×</button></div>
+      <form id="resetPasswordForm" class="login-form"><label>Nova senha<input id="resetPassword" type="password" minlength="8" autocomplete="new-password" required /></label><label>Confirmar nova senha<input id="resetPasswordConfirm" type="password" minlength="8" autocomplete="new-password" required /></label><button class="primary-button" type="submit">Salvar nova senha</button></form>
+      <p id="resetPasswordMessage" class="form-message" aria-live="polite"></p>
+    </dialog>
+    <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
+      <div class="support-dialog-head">
+        <div><p class="eyebrow">Atendimento</p><h2 id="supportTitle">Falar com o suporte</h2></div>
+        <button id="closeSupportDialog" class="icon-button" type="button" aria-label="Fechar suporte" title="Fechar">×</button>
+      </div>
+      <p>Escolha onde deseja escrever. O destinatário e a mensagem já estarão preenchidos.</p>
+      <div class="support-email-box"><span>E-mail</span><strong>contato@ricoxp.com</strong></div>
+      <div class="support-options">
+        <a class="primary-button" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=contato%40ricoxp.com&amp;su=Suporte%20RicoXP&amp;body=Ol%C3%A1%2C%20equipe%20RicoXP!%0A%0APreciso%20de%20ajuda%20com%3A%0A%0A%0AE-mail%20da%20minha%20conta%3A%0A%0AObrigado!" target="_blank" rel="noopener">Abrir no Gmail</a>
+        <a class="ghost-button" href="https://outlook.office.com/mail/deeplink/compose?to=contato%40ricoxp.com&amp;subject=Suporte%20RicoXP&amp;body=Ol%C3%A1%2C%20equipe%20RicoXP!%0A%0APreciso%20de%20ajuda%20com%3A%0A%0A%0AE-mail%20da%20minha%20conta%3A%0A%0AObrigado!" target="_blank" rel="noopener">Abrir no Outlook</a>
+        <a class="ghost-button" href="mailto:contato@ricoxp.com?subject=Suporte%20RicoXP&amp;body=Ol%C3%A1%2C%20equipe%20RicoXP!%0A%0APreciso%20de%20ajuda%20com%3A%0A%0A%0AE-mail%20da%20minha%20conta%3A%0A%0AObrigado!">Usar aplicativo de e-mail</a>
+        <button id="copySupportEmail" class="ghost-button" type="button">Copiar endereço</button>
+      </div>
+      <p id="supportFeedback" class="form-message" aria-live="polite"></p>
+    </dialog>
     <section id="installPrompt" class="install-prompt hidden" role="dialog" aria-labelledby="installTitle" aria-describedby="installDescription">
       <img src="/brand-icon-192" alt="" width="56" height="56" />
       <div class="install-copy">

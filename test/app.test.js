@@ -68,6 +68,61 @@ test("promove automaticamente o e-mail principal para administrador", async (con
   assert.equal((await storage.findUser("email", "apktemoficial@gmail.com")).role, "admin");
 });
 
+test("cadastra nome e foto no perfil do cliente", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const avatarData = "data:image/jpeg;base64,dGVzdGU=";
+  const account = await post(base, "/api/register", { name: "Maria Silva", identifier: "maria@example.com", avatarData, password: "SenhaForte123" });
+  assert.equal(account.status, 201);
+  assert.equal(account.body.user.name, "Maria Silva");
+  assert.equal(account.body.user.avatarData, avatarData);
+});
+
+test("recupera a senha por token temporario enviado por email", async (context) => {
+  const storage = new MemoryStorage();
+  let resetToken;
+  const mailer = { configured: true, async sendPasswordReset(data) { resetToken = data.token; } };
+  const app = await createApp({ storage, mailer, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  await post(base, "/api/register", { name: "Cliente Teste", identifier: "recuperar@example.com", password: "SenhaAntiga123" });
+  const request = await post(base, "/api/password/forgot", { email: "recuperar@example.com" });
+  assert.equal(request.status, 200);
+  assert.ok(resetToken);
+  const reset = await post(base, "/api/password/reset", { token: resetToken, password: "SenhaNova123" });
+  assert.equal(reset.status, 200);
+  assert.equal((await post(base, "/api/login", { identifier: "recuperar@example.com", password: "SenhaNova123" })).status, 200);
+  assert.equal((await post(base, "/api/password/reset", { token: resetToken, password: "OutraSenha123" })).status, 400);
+});
+
+test("administrador gerencia perfil sem acessar o financeiro do cliente", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const admin = await post(base, "/api/register", { name: "Administrador", identifier: "admin@example.com", password: "SenhaForte123" });
+  const client = await post(base, "/api/register", { name: "Cliente", identifier: "cliente-admin@example.com", password: "SenhaCliente123" });
+  await post(base, "/api/bills", { name: "Conta privada", amount: 200, dueDate: "2026-07-10", profile: "Casa", category: "Moradia", status: "pending" }, client.cookie);
+  const detail = await get(base, `/api/admin/users/${client.body.user.id}`, admin.cookie);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.user.name, "Cliente");
+  assert.equal("bills" in detail.body, false);
+  assert.equal("cards" in detail.body, false);
+  const updated = await patch(base, `/api/admin/users/${client.body.user.id}`, { name: "Cliente Atualizada", email: "cliente-novo@example.com", avatarData: null }, admin.cookie);
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.user.identifierLabel, "cliente-novo@example.com");
+  assert.equal((await patch(base, `/api/admin/users/${client.body.user.id}/password`, { password: "SenhaTemporaria123" }, admin.cookie)).status, 200);
+  assert.equal((await post(base, "/api/login", { identifier: "cliente-novo@example.com", password: "SenhaTemporaria123" })).status, 200);
+});
+
 test("aplica limites gratis e libera recursos apos assinatura Pro", async (context) => {
   const storage = new MemoryStorage();
   let remoteStatus = "pending";
@@ -202,4 +257,9 @@ async function post(base, path, body, cookie = "") {
 async function get(base, path, cookie) {
   const response = await fetch(`${base}${path}`, { headers: { Cookie: cookie } });
   return { status: response.status, body: await response.json() };
+}
+
+async function patch(base, path, body, cookie = "") {
+  const response = await fetch(`${base}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
+  return { status: response.status, body: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };
 }
