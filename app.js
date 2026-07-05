@@ -226,7 +226,23 @@ function billSituation(bill) {
   return new Date(`${bill.dueDate}T00:00:00`) < today ? "overdue" : "pending";
 }
 
+function renderDashboardNavigation() {
+  const firstName = String(state.user?.name || state.user?.identifierLabel || "").trim().split(/\s+/)[0] || "cliente";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "bom dia" : hour < 18 ? "boa tarde" : "boa noite";
+  $("#dashboardGreeting").textContent = `Olá, ${greeting}, ${firstName}!`;
+  const [year, selectedMonth] = (els.monthFilter.value || new Date().toISOString().slice(0, 7)).split("-");
+  const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  $("#monthTabsYear").textContent = year;
+  $("#monthTabs").innerHTML = monthNames.map((name, index) => {
+    const value = `${year}-${String(index + 1).padStart(2, "0")}`;
+    const active = String(index + 1).padStart(2, "0") === selectedMonth;
+    return `<button class="month-tab ${active ? "active" : ""}" type="button" role="tab" aria-selected="${active}" data-month-value="${value}">${name}</button>`;
+  }).join("");
+}
+
 function render() {
+  renderDashboardNavigation();
   renderMetrics();
   renderChart();
   renderIncome();
@@ -531,6 +547,10 @@ function setWorkspace(profile, remember = true) {
   $("#cardProfile").value = selected;
   $("#workspaceContext").textContent = selected;
   $$('[data-workspace]').forEach((button) => button.classList.toggle("active", button.dataset.workspace === selected));
+  $$('[data-area-only]').forEach((item) => item.classList.toggle("hidden", item.dataset.areaOnly !== selected));
+  const activeView = $(".view.active-view")?.id.replace(/View$/, "");
+  const activeNav = activeView ? $(`[data-view="${activeView}"]`) : null;
+  if (activeNav?.classList.contains("hidden")) switchView("dashboard", "Dashboard");
   resetBillForm();
   els.cardForm.reset();
   $("#cardProfile").value = selected;
@@ -743,6 +763,15 @@ $("#menuBackdrop").addEventListener("click", closeMobileMenu);
 window.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobileMenu(); });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => { switchView(button.dataset.view, button.textContent.trim()); closeMobileMenu(); }));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); els.cardForm.reset(); setCardDateDefaults(); render(); });
+$("#monthTabs").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-month-value]");
+  if (!button) return;
+  els.monthFilter.value = button.dataset.monthValue;
+  resetBillForm();
+  els.cardForm.reset();
+  setCardDateDefaults();
+  render();
+});
 ["#upcomingList", "#reminderList"].forEach((selector) => $(selector).addEventListener("click", (event) => {
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);
