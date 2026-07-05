@@ -82,18 +82,29 @@
     </main>
 
     <main id="appScreen" class="app-shell hidden">
-      <aside class="sidebar">
+      <aside id="sidebar" class="sidebar">
+        <button id="closeMobileMenu" class="mobile-menu-close" type="button" aria-label="Fechar menu">×</button>
         <div class="sidebar-head"><img id="userAvatar" class="user-avatar" src="/brand-icon-192" alt="Foto do cliente" /><div><p class="eyebrow">Financeiro</p><h2>Controle mensal</h2><span id="userBadge" class="user-badge"></span></div></div>
         <div class="workspace-switch" aria-label="Escolha a área financeira">
           <button class="workspace-button active" data-workspace="Casa" type="button">Casa</button>
           <button class="workspace-button" data-workspace="Empresa" type="button">Empresa <span class="workspace-plan">Pro</span></button>
         </div>
         <nav class="nav-list" aria-label="Áreas">
-          <button class="nav-item active" data-view="dashboard" type="button">Painel</button>
+          <span class="nav-section-label">Visão geral</span>
+          <button class="nav-item active" data-view="dashboard" type="button">Dashboard</button>
           <button class="nav-item" data-view="charts" type="button">Gráficos</button>
-          <button class="nav-item" data-view="bills" type="button">Contas</button>
+          <span class="nav-section-label">Movimentações</span>
+          <button class="nav-item" data-view="incomeEntries" type="button">Recebimentos</button>
+          <button class="nav-item" data-view="variableExpenses" type="button">Gastos variáveis</button>
+          <button class="nav-item" data-view="receivables" type="button">Contas a receber</button>
+          <button class="nav-item" data-view="bills" type="button">Contas a pagar</button>
           <button class="nav-item" data-view="cards" type="button">Cartões</button>
           <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
+          <span class="nav-section-label">Ferramentas</span>
+          <button class="nav-item" data-view="shopping" data-area-only="Casa" type="button">Lista de compras</button>
+          <button class="nav-item" data-view="dre" data-area-only="Empresa" type="button">DRE</button>
+          <button class="nav-item" data-view="accountant" data-area-only="Empresa" type="button">Contador</button>
+          <span class="nav-section-label">Conta</span>
           <button class="nav-item" data-view="feedback" type="button">Feedback</button>
           <button class="nav-item" data-view="subscription" type="button">Assinatura</button>
           <button id="adminNav" class="nav-item hidden" data-view="admin" type="button">Administração</button>
@@ -148,6 +159,29 @@
           </div>
           <section class="panel"><div class="panel-title"><h2>Previsão dos próximos meses</h2><span>6 meses</span></div><div id="chartsForecastList" class="forecast-list"></div></section>
         </section>
+        <section id="incomeEntriesView" class="view financial-module-view" data-entry-type="income">
+          <section class="panel form-panel"><div class="panel-title"><div><h2>Adicionar recebimento</h2><p class="muted">Registre salários, vendas, comissões e outras entradas.</p></div><strong id="incomeEntriesTotal">R$ 0,00</strong></div><form class="data-form financial-entry-form" data-type="income"><input name="id" type="hidden" /><label>Descrição<input name="description" type="text" maxlength="160" placeholder="Ex: Salário ou venda" required /></label><label>Valor<input name="amount" class="money-input" type="text" inputmode="decimal" placeholder="Ex: 2.500,00" required /></label><label>Data<input name="date" type="date" required /></label><label>Categoria<input name="category" type="text" maxlength="40" placeholder="Ex: Salário" required /></label><label>Situação<select name="status"><option value="settled">Recebido</option><option value="pending">A receber</option></select></label><label>Observação<input name="notes" type="text" maxlength="500" placeholder="Opcional" /></label><button class="primary-button" type="submit">Salvar recebimento</button><button class="ghost-button cancel-entry hidden" type="button">Cancelar edição</button></form></section><section class="panel"><div class="panel-title"><h2>Recebimentos do mês</h2><span id="incomeEntriesCount">0 lançamentos</span></div><div id="incomeEntriesList" class="entry-list"></div></section>
+        </section>
+
+        <section id="variableExpensesView" class="view financial-module-view" data-entry-type="variable_expense">
+          <section class="panel form-panel"><div class="panel-title"><div><h2>Adicionar gasto variável</h2><p class="muted">Registre despesas que mudam de valor ou não acontecem todos os meses.</p></div><strong id="variableExpensesTotal">R$ 0,00</strong></div><form class="data-form financial-entry-form" data-type="variable_expense"><input name="id" type="hidden" /><label>Descrição<input name="description" type="text" maxlength="160" placeholder="Ex: Manutenção" required /></label><label>Valor<input name="amount" class="money-input" type="text" inputmode="decimal" placeholder="Ex: 350,00" required /></label><label>Data<input name="date" type="date" required /></label><label>Categoria<input name="category" type="text" maxlength="40" placeholder="Ex: Transporte" required /></label><label>Situação<select name="status"><option value="settled">Pago</option><option value="pending">Pendente</option></select></label><label>Observação<input name="notes" type="text" maxlength="500" placeholder="Opcional" /></label><button class="primary-button" type="submit">Salvar gasto</button><button class="ghost-button cancel-entry hidden" type="button">Cancelar edição</button></form></section><section class="panel"><div class="panel-title"><h2>Gastos variáveis do mês</h2><span id="variableExpensesCount">0 lançamentos</span></div><div id="variableExpensesList" class="entry-list"></div></section>
+        </section>
+
+        <section id="receivablesView" class="view financial-module-view" data-entry-type="receivable">
+          <section class="panel form-panel"><div class="panel-title"><div><h2>Adicionar conta a receber</h2><p class="muted">Acompanhe valores prometidos e marque quando entrarem.</p></div><strong id="receivablesTotal">R$ 0,00</strong></div><form class="data-form financial-entry-form" data-type="receivable"><input name="id" type="hidden" /><label>Descrição<input name="description" type="text" maxlength="160" placeholder="Ex: Cliente Silva" required /></label><label>Valor<input name="amount" class="money-input" type="text" inputmode="decimal" placeholder="Ex: 1.200,00" required /></label><label>Vencimento<input name="date" type="date" required /></label><label>Categoria<input name="category" type="text" maxlength="40" placeholder="Ex: Serviços" required /></label><label>Situação<select name="status"><option value="pending">A receber</option><option value="settled">Recebido</option></select></label><label>Observação<input name="notes" type="text" maxlength="500" placeholder="Opcional" /></label><button class="primary-button" type="submit">Salvar conta</button><button class="ghost-button cancel-entry hidden" type="button">Cancelar edição</button></form></section><section class="panel"><div class="panel-title"><h2>Contas a receber do mês</h2><span id="receivablesCount">0 lançamentos</span></div><div id="receivablesList" class="entry-list"></div></section>
+        </section>
+        <section id="dreView" class="view">
+          <div class="summary-grid dre-summary"><article class="metric paid"><span>Receita reconhecida</span><strong id="dreRevenue">R$ 0,00</strong><small>Recebimentos do mês</small></article><article class="metric due"><span>Gastos variáveis</span><strong id="dreVariable">R$ 0,00</strong><small>Despesas variáveis</small></article><article class="metric late"><span>Custos e contas</span><strong id="dreFixed">R$ 0,00</strong><small>Contas empresariais</small></article><article id="dreResultMetric" class="metric"><span>Resultado líquido</span><strong id="dreResult">R$ 0,00</strong><small id="dreMargin">Margem de 0%</small></article></div>
+          <section class="panel"><div class="panel-title"><div><h2>Demonstração do Resultado</h2><p class="muted">Visão gerencial por competência do mês selecionado.</p></div><span id="drePeriod"></span></div><div id="dreLines" class="dre-lines"></div></section>
+        </section>
+
+        <section id="accountantView" class="view">
+          <div class="dashboard-grid accountant-grid">
+            <section class="panel"><div class="panel-title"><div><h2>Cadastrar contador</h2><p class="muted">O contador terá acesso somente de leitura à área Empresa.</p></div></div><form id="accountantForm" class="income-form"><label>E-mail do contador<input id="accountantEmail" type="email" autocomplete="email" placeholder="contador@escritorio.com" required /></label><button class="primary-button" type="submit">Liberar acesso</button></form><p id="accountantMessage" class="form-message" aria-live="polite"></p><div id="accountantList" class="access-list"></div></section>
+            <section class="panel"><div class="panel-title"><div><h2>Empresas compartilhadas comigo</h2><p class="muted">Acesso contábil recebido nesta conta.</p></div></div><div id="accountantCompanies" class="access-list"></div></section>
+          </div>
+          <section id="accountantReport" class="panel hidden"><div class="panel-title"><div><h2 id="accountantReportTitle">DRE da empresa</h2><p class="muted">Consulta somente de leitura.</p></div><span id="accountantReportPeriod"></span></div><div id="accountantReportLines" class="dre-lines"></div></section>
+        </section>
         <section id="billsView" class="view">
           <section class="panel form-panel"><div class="panel-title"><h2>Adicionar conta</h2></div>
             <form id="billForm" class="data-form">
@@ -197,6 +231,12 @@
           <section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section>
         </section>
 
+        <section id="shoppingView" class="view">
+          <section class="panel shopping-head"><div class="panel-title"><div><h2>Lista de compras</h2><p class="muted">Monte a lista e marque cada produto quando colocar no carrinho.</p></div><button id="clearCheckedShopping" class="ghost-button" type="button">Limpar comprados</button></div><div class="shopping-progress-copy"><strong id="shoppingProgressText">0 de 0 itens</strong><span id="shoppingProgressPercent">0%</span></div><div class="progress shopping-progress"><span id="shoppingProgressBar"></span></div></section>
+          <section class="panel"><div class="panel-title"><h2>Escolha uma seção</h2><span>Toque para ver sugestões</span></div><div id="shoppingCategories" class="shopping-categories"></div><div id="shoppingSuggestions" class="shopping-suggestions"></div></section>
+          <section class="panel"><div class="panel-title"><h2>Adicionar produto</h2><span id="shoppingSelectedCategory">Mercearia</span></div><form id="shoppingForm" class="shopping-form"><label>Produto<input id="shoppingName" type="text" maxlength="100" placeholder="Ex: Arroz" required /></label><label>Quantidade<input id="shoppingQuantity" type="number" min="0.01" max="9999" step="0.01" value="1" required /></label><label>Unidade<select id="shoppingUnit"><option value="un">unidade</option><option value="kg">kg</option><option value="g">g</option><option value="L">litro</option><option value="ml">ml</option><option value="pct">pacote</option><option value="cx">caixa</option></select></label><input id="shoppingCategory" type="hidden" value="Mercearia" /><button class="primary-button" type="submit">Adicionar à lista</button></form></section>
+          <section class="panel"><div class="panel-title"><h2>Minha lista</h2><span id="shoppingItemCount">0 itens</span></div><div id="shoppingList" class="shopping-list"></div></section>
+        </section>
         <section id="feedbackView" class="view">
           <div class="feedback-grid">
             <section class="panel">

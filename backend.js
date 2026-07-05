@@ -28,7 +28,18 @@ const adminProfileSchema = z.object({ name: z.string().trim().min(2).max(100), e
 const adminPasswordSchema = z.object({ password: z.string().min(8).max(72) });
 const feedbackSchema = z.object({ rating: z.coerce.number().int().min(1).max(10), message: z.string().trim().min(3).max(2000) });
 const feedbackReplySchema = z.object({ response: z.string().trim().min(2).max(2000) });
-const billSchema = z.object({
+const accountantSchema = z.object({ email: z.string().trim().email().max(320) });
+const shoppingItemSchema = z.object({ name: z.string().trim().min(1).max(100), category: z.string().trim().min(2).max(40), quantity: z.coerce.number().positive().max(9999), unit: z.enum(["un", "kg", "g", "L", "ml", "pct", "cx"]) });
+const shoppingUpdateSchema = z.object({ checked: z.boolean() });const financialEntrySchema = z.object({
+  type: z.enum(["income", "variable_expense", "receivable"]),
+  profile: z.enum(profiles),
+  description: z.string().trim().min(2).max(160),
+  amount: z.coerce.number().positive().max(999999999.99),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  category: z.string().trim().min(2).max(40),
+  status: z.enum(["pending", "settled"]),
+  notes: z.string().trim().max(500).optional().default(""),
+});const billSchema = z.object({
   name: z.string().trim().min(2).max(160),
   amount: z.coerce.number().positive().max(999999999.99),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -200,7 +211,7 @@ export async function createApp(options = {}) {
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
     const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
     if (access.plan === "pro") return res.json(data);
-    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa"), categories: data.categories || [] });
+    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa"), categories: data.categories || [], financialEntries: (data.financialEntries || []).filter((entry) => entry.profile === "Casa"), shoppingItems: data.shoppingItems || [] });
   }));
   app.post("/api/categories", authenticate, asyncRoute(async (req, res) => {
     const { name } = categorySchema.parse(req.body);
@@ -238,6 +249,25 @@ export async function createApp(options = {}) {
     return res.status(204).end();
   }));
 
+  app.post("/api/shopping-items", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createShoppingItem(req.user.id, shoppingItemSchema.parse(req.body)))));
+  app.patch("/api/shopping-items/:id", authenticate, asyncRoute(async (req, res) => { const item = await storage.updateShoppingItem(req.user.id, req.params.id, shoppingUpdateSchema.parse(req.body)); return item ? res.json(item) : res.status(404).json({ error: "Item não encontrado." }); }));
+  app.delete("/api/shopping-items/checked", authenticate, asyncRoute(async (req, res) => res.json({ removed: await storage.clearCheckedShoppingItems(req.user.id) })));
+  app.delete("/api/shopping-items/:id", authenticate, asyncRoute(async (req, res) => (await storage.deleteShoppingItem(req.user.id, req.params.id)) ? res.status(204).end() : res.status(404).json({ error: "Item não encontrado." })));
+  app.post("/api/financial-entries", authenticate, asyncRoute(async (req, res) => {
+    const input = financialEntrySchema.parse(req.body);
+    await ensureProfileAccess(req.user, input.profile);
+    return res.status(201).json(await storage.createFinancialEntry(req.user.id, input));
+  }));
+  app.put("/api/financial-entries/:id", authenticate, asyncRoute(async (req, res) => {
+    const input = financialEntrySchema.parse(req.body);
+    await ensureProfileAccess(req.user, input.profile);
+    const entry = await storage.updateFinancialEntry(req.user.id, req.params.id, input);
+    return entry ? res.json(entry) : res.status(404).json({ error: "Lançamento não encontrado." });
+  }));
+  app.delete("/api/financial-entries/:id", authenticate, asyncRoute(async (req, res) => {
+    const deleted = await storage.deleteFinancialEntry(req.user.id, req.params.id);
+    return deleted ? res.status(204).end() : res.status(404).json({ error: "Lançamento não encontrado." });
+  }));
   app.post("/api/bills", authenticate, asyncRoute(async (req, res) => {
     const input = billCreateSchema.parse(req.body);
     if (input.recurring && input.installments > 1) return res.status(400).json({ error: "Conta fixa mensal não deve ter parcelas." });
@@ -336,6 +366,24 @@ export async function createApp(options = {}) {
     return res.status(200).json({ received: true });
   }));
 
+  app.get("/api/accountants", authenticate, asyncRoute(async (req, res) => res.json({ accountants: await storage.listAccountants(req.user.id) })));
+  app.post("/api/accountants", authenticate, asyncRoute(async (req, res) => {
+    const access = await getAccess(req.user);
+    if (access.plan !== "pro") return res.status(402).json({ error: "O acesso do contador é exclusivo do plano Pro." });
+    const { email } = accountantSchema.parse(req.body);
+    if (req.user.email?.toLowerCase() === email.toLowerCase()) return res.status(400).json({ error: "Informe o e-mail do contador." });
+    return res.status(201).json(await storage.grantAccountant(req.user.id, email.toLowerCase()));
+  }));
+  app.delete("/api/accountants/:id", authenticate, asyncRoute(async (req, res) => (await storage.deleteAccountant(req.user.id, req.params.id)) ? res.status(204).end() : res.status(404).json({ error: "Acesso não encontrado." })));
+  app.get("/api/accountant/companies", authenticate, asyncRoute(async (req, res) => res.json({ companies: req.user.email ? await storage.listAccountantCompanies(req.user.email.toLowerCase()) : [] })));
+  app.get("/api/accountant/companies/:ownerId", authenticate, asyncRoute(async (req, res) => {
+    if (!req.user.email) return res.status(403).json({ error: "Acesso contábil exige uma conta com e-mail." });
+    const companies = await storage.listAccountantCompanies(req.user.email.toLowerCase());
+    const company = companies.find((item) => item.ownerUserId === req.params.ownerId);
+    if (!company) return res.status(403).json({ error: "Empresa não compartilhada com esta conta." });
+    const data = await listDataWithRecurringHorizon({ id: req.params.ownerId, role: "user" });
+    return res.json({ company, bills: data.bills.filter((item) => item.profile === "Empresa"), financialEntries: (data.financialEntries || []).filter((item) => item.profile === "Empresa") });
+  }));
   app.get("/api/feedback", authenticate, asyncRoute(async (req, res) => res.json({ feedbacks: await storage.listFeedback(req.user.id) })));
   app.post("/api/feedback", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createFeedback(req.user.id, feedbackSchema.parse(req.body)))));
 

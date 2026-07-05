@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export class MemoryStorage {
-  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; this.feedbacks = []; this.categories = []; }
+  constructor() { this.users = []; this.bills = []; this.cards = []; this.incomes = []; this.subscriptions = []; this.notificationPreferences = []; this.notificationDeliveries = []; this.pushSubscriptions = []; this.passwordResetTokens = []; this.feedbacks = []; this.categories = []; this.financialEntries = []; this.accountantAccesses = []; this.shoppingItems = []; }
   async findUser(type, lookup) { return this.users.find((user) => (type === "email" ? user.email === lookup : user.cpfHash === lookup)) || null; }
   async createUser(data) {
     if (await this.findUser(data.identifierType, data.lookup)) throw duplicateError();
@@ -14,7 +14,14 @@ export class MemoryStorage {
   async updateUserPassword(id, passwordHash) { const user = this.users.find((item) => item.id === id); if (!user) return false; user.passwordHash = passwordHash; return true; }
   async createPasswordResetToken(userId, tokenHash, expiresAt) { this.passwordResetTokens = this.passwordResetTokens.filter((item) => item.userId !== userId); this.passwordResetTokens.push({ userId, tokenHash, expiresAt, usedAt: null }); }
   async consumePasswordResetToken(tokenHash) { const token = this.passwordResetTokens.find((item) => item.tokenHash === tokenHash && !item.usedAt && new Date(item.expiresAt) > new Date()); if (!token) return null; token.usedAt = new Date().toISOString(); return token.userId; }
-  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId), incomes: this.incomes.filter((item) => item.userId === userId), categories: this.categories.filter((item) => item.userId === userId) }; }
+  async listData(userId) { return { bills: this.bills.filter((item) => item.userId === userId), cards: this.cards.filter((item) => item.userId === userId), incomes: this.incomes.filter((item) => item.userId === userId), categories: this.categories.filter((item) => item.userId === userId), financialEntries: this.financialEntries.filter((item) => item.userId === userId), shoppingItems: this.shoppingItems.filter((item) => item.userId === userId) }; }
+  async createShoppingItem(userId, data) { const item = { id: randomUUID(), userId, ...data, checked: false, createdAt: new Date().toISOString() }; this.shoppingItems.push(item); return item; }
+  async updateShoppingItem(userId, id, data) { const index = this.shoppingItems.findIndex((item) => item.id === id && item.userId === userId); if (index < 0) return null; this.shoppingItems[index] = { ...this.shoppingItems[index], ...data }; return this.shoppingItems[index]; }
+  async deleteShoppingItem(userId, id) { const before = this.shoppingItems.length; this.shoppingItems = this.shoppingItems.filter((item) => !(item.id === id && item.userId === userId)); return this.shoppingItems.length < before; }
+  async clearCheckedShoppingItems(userId) { const before = this.shoppingItems.length; this.shoppingItems = this.shoppingItems.filter((item) => !(item.userId === userId && item.checked)); return before - this.shoppingItems.length; }
+  async createFinancialEntry(userId, data) { const item = { id: randomUUID(), userId, ...data, createdAt: new Date().toISOString() }; this.financialEntries.push(item); return item; }
+  async updateFinancialEntry(userId, id, data) { const index = this.financialEntries.findIndex((item) => item.id === id && item.userId === userId); if (index < 0) return null; this.financialEntries[index] = { ...this.financialEntries[index], ...data }; return this.financialEntries[index]; }
+  async deleteFinancialEntry(userId, id) { const before = this.financialEntries.length; this.financialEntries = this.financialEntries.filter((item) => !(item.id === id && item.userId === userId)); return this.financialEntries.length < before; }
   async getBill(userId, id) { return this.bills.find((item) => item.id === id && item.userId === userId) || null; }
   async createBill(userId, data) { const bill = { id: randomUUID(), userId, ...data }; this.bills.push(bill); return bill; }
   async createBills(userId, entries) { const bills = entries.map((data) => ({ id: randomUUID(), userId, ...data })); this.bills.push(...bills); return bills; }
@@ -36,6 +43,10 @@ export class MemoryStorage {
   async deletePushSubscription(userId, endpoint) { const before = this.pushSubscriptions.length; this.pushSubscriptions = this.pushSubscriptions.filter((item) => !(item.userId === userId && item.endpoint === endpoint)); return this.pushSubscriptions.length < before; }
   async getNotificationDelivery(billId, scheduledFor) { return this.notificationDeliveries.find((item) => item.billId === billId && item.scheduledFor === scheduledFor) || null; }
   async recordNotificationDelivery(data) { const index = this.notificationDeliveries.findIndex((item) => item.billId === data.billId && item.scheduledFor === data.scheduledFor); const item = { id: index >= 0 ? this.notificationDeliveries[index].id : randomUUID(), ...data }; if (index >= 0) this.notificationDeliveries[index] = item; else this.notificationDeliveries.push(item); return item; }
+  async grantAccountant(ownerUserId, email) { const index = this.accountantAccesses.findIndex((item) => item.ownerUserId === ownerUserId && item.accountantEmail === email); const item = { id: index >= 0 ? this.accountantAccesses[index].id : randomUUID(), ownerUserId, accountantEmail: email, createdAt: new Date().toISOString() }; if (index >= 0) this.accountantAccesses[index] = item; else this.accountantAccesses.push(item); return item; }
+  async listAccountants(ownerUserId) { return this.accountantAccesses.filter((item) => item.ownerUserId === ownerUserId); }
+  async deleteAccountant(ownerUserId, id) { const before = this.accountantAccesses.length; this.accountantAccesses = this.accountantAccesses.filter((item) => !(item.id === id && item.ownerUserId === ownerUserId)); return this.accountantAccesses.length < before; }
+  async listAccountantCompanies(email) { return this.accountantAccesses.filter((item) => item.accountantEmail === email).map((item) => ({ ...item, owner: publicUser(this.users.find((user) => user.id === item.ownerUserId) || {}) })); }
   async createFeedback(userId, data) { const item = { id: randomUUID(), userId, ...data, response: null, respondedAt: null, createdAt: new Date().toISOString() }; this.feedbacks.unshift(item); return item; }
   async listFeedback(userId) { return this.feedbacks.filter((item) => item.userId === userId); }
   async adminFeedback() { return this.feedbacks.map((item) => ({ ...item, user: publicUser(this.users.find((user) => user.id === item.userId) || {}) })); }
@@ -111,16 +122,52 @@ class SupabaseStorage {
   }
 
   async listData(userId) {
-    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }, incomeResult, categoryResult] = await Promise.all([
+    const [{ data: bills, error: billsError }, { data: cards, error: cardsError }, incomeResult, categoryResult, entryResult, shoppingResult] = await Promise.all([
       this.client.from("bills").select("*").eq("user_id", userId).order("due_date"),
       this.client.from("cards").select("id, name, credit_limit, close_day, due_day, profile").eq("user_id", userId).order("name"),
       this.client.from("monthly_incomes").select("id, user_id, month, profile, amount").eq("user_id", userId).order("month"),
       this.client.from("user_categories").select("id, user_id, name, created_at").eq("user_id", userId).order("name"),
+          this.client.from("financial_entries").select("*").eq("user_id", userId).order("entry_date", { ascending: false }),
+          this.client.from("shopping_items").select("*").eq("user_id", userId).order("created_at"),
     ]);
     check(billsError); check(cardsError);
     const incomes = isMissingFeatureTable(incomeResult.error) ? [] : (check(incomeResult.error), incomeResult.data.map(mapIncome));
     const categories = isMissingFeatureTable(categoryResult.error) ? [] : (check(categoryResult.error), categoryResult.data.map(mapCategory));
-    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes, categories };
+    const financialEntries = isMissingFeatureTable(entryResult.error) ? [] : (check(entryResult.error), entryResult.data.map(mapFinancialEntry));
+    const shoppingItems = isMissingFeatureTable(shoppingResult.error) ? [] : (check(shoppingResult.error), shoppingResult.data.map(mapShoppingItem));
+    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes, categories, financialEntries, shoppingItems };
+  }
+
+  async createShoppingItem(userId, input) {
+    const { data, error } = await this.client.from("shopping_items").insert({ id: randomUUID(), user_id: userId, name: input.name, category: input.category, quantity: input.quantity, unit: input.unit, checked: false }).select("*").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela da lista de compras no Supabase.");
+    check(error); return mapShoppingItem(data);
+  }
+  async updateShoppingItem(userId, id, input) {
+    const { data, error } = await this.client.from("shopping_items").update(input).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela da lista de compras no Supabase.");
+    check(error); return data ? mapShoppingItem(data) : null;
+  }
+  async deleteShoppingItem(userId, id) { const { data, error } = await this.client.from("shopping_items").delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle(); if (isMissingFeatureTable(error)) return false; check(error); return Boolean(data); }
+  async clearCheckedShoppingItems(userId) { const { data, error } = await this.client.from("shopping_items").delete().eq("user_id", userId).eq("checked", true).select("id"); if (isMissingFeatureTable(error)) return 0; check(error); return data?.length || 0; }
+
+  async createFinancialEntry(userId, input) {
+    const { data, error } = await this.client.from("financial_entries").insert(toFinancialEntryRow(randomUUID(), userId, input)).select("*").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de lançamentos financeiros no Supabase.");
+    check(error); return mapFinancialEntry(data);
+  }
+
+  async updateFinancialEntry(userId, id, input) {
+    const row = toFinancialEntryRow(id, userId, input); delete row.id; delete row.user_id;
+    const { data, error } = await this.client.from("financial_entries").update(row).eq("id", id).eq("user_id", userId).select("*").maybeSingle();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de lançamentos financeiros no Supabase.");
+    check(error); return data ? mapFinancialEntry(data) : null;
+  }
+
+  async deleteFinancialEntry(userId, id) {
+    const { data, error } = await this.client.from("financial_entries").delete().eq("id", id).eq("user_id", userId).select("id").maybeSingle();
+    if (isMissingFeatureTable(error)) return false;
+    check(error); return Boolean(data);
   }
 
   async getBill(userId, id) {
@@ -260,6 +307,30 @@ class SupabaseStorage {
     check(error); return mapNotificationDelivery(saved);
   }
 
+  async grantAccountant(ownerUserId, email) {
+    const { data, error } = await this.client.from("accountant_accesses").upsert({ owner_user_id: ownerUserId, accountant_email: email }, { onConflict: "owner_user_id,accountant_email" }).select("*").single();
+    if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de acesso do contador no Supabase.");
+    check(error); return mapAccountantAccess(data);
+  }
+
+  async listAccountants(ownerUserId) {
+    const { data, error } = await this.client.from("accountant_accesses").select("*").eq("owner_user_id", ownerUserId).order("created_at", { ascending: false });
+    if (isMissingFeatureTable(error)) return [];
+    check(error); return data.map(mapAccountantAccess);
+  }
+
+  async deleteAccountant(ownerUserId, id) {
+    const { data, error } = await this.client.from("accountant_accesses").delete().eq("id", id).eq("owner_user_id", ownerUserId).select("id").maybeSingle();
+    if (isMissingFeatureTable(error)) return false;
+    check(error); return Boolean(data);
+  }
+
+  async listAccountantCompanies(email) {
+    const { data, error } = await this.client.from("accountant_accesses").select("*, users!accountant_accesses_owner_user_id_fkey(id,name,email,identifier_label)").eq("accountant_email", email).order("created_at", { ascending: false });
+    if (isMissingFeatureTable(error)) return [];
+    check(error); return data.map((row) => ({ ...mapAccountantAccess(row), owner: { id: row.users?.id, name: row.users?.name || row.users?.identifier_label, email: row.users?.email, identifierLabel: row.users?.identifier_label } }));
+  }
+
   async createFeedback(userId, input) {
     const { data, error } = await this.client.from("feedbacks").insert({ user_id: userId, rating: input.rating, message: input.message }).select("*").single();
     if (isMissingFeatureTable(error)) throw migrationError("Crie a tabela de feedbacks no Supabase.");
@@ -322,6 +393,9 @@ class SupabaseStorage {
   }
 }
 
+function mapShoppingItem(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, category: row.category, quantity: Number(row.quantity), unit: row.unit, checked: Boolean(row.checked), createdAt: row.created_at || row.createdAt }; }
+function toFinancialEntryRow(id, userId, data) { return { id, user_id: userId, entry_type: data.type, profile: data.profile, description: data.description, amount: data.amount, entry_date: data.date, category: data.category, status: data.status, notes: data.notes || null }; }
+function mapFinancialEntry(row) { return { id: row.id, userId: row.user_id || row.userId, type: row.entry_type || row.type, profile: row.profile, description: row.description, amount: Number(row.amount), date: row.entry_date || row.date, category: row.category, status: row.status, notes: row.notes || "", createdAt: row.created_at || row.createdAt }; }
 function toBillRow(id, userId, data) { return { id, user_id: userId, name: data.name, amount: data.amount, due_date: data.dueDate, profile: data.profile, category: data.category, status: data.status, tags: data.tags || [], series_id: data.seriesId || null, series_type: data.seriesType || "single", installment_number: data.installmentNumber || null, installment_total: data.installmentTotal || null }; }
 function toLegacyBillRow(row) { const { tags, series_id, series_type, installment_number, installment_total, ...legacy } = row; return legacy; }
 function mapBill(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, amount: Number(row.amount), dueDate: row.due_date || row.dueDate, profile: row.profile, category: row.category, status: row.status, tags: row.tags || [], seriesId: row.series_id || row.seriesId || null, seriesType: row.series_type || row.seriesType || "single", installmentNumber: row.installment_number || row.installmentNumber || null, installmentTotal: row.installment_total || row.installmentTotal || null }; }
@@ -331,6 +405,7 @@ function mapIncome(row) { return { id: row.id, userId: row.user_id || row.userId
 function mapSubscription(row) { return { userId: row.user_id, providerId: row.provider_id, payerEmail: row.payer_email, status: row.status, nextPaymentDate: row.next_payment_date, updatedAt: row.updated_at }; }
 function mapNotificationPreferences(row) { return { userId: row.user_id, pushEnabled: Boolean(row.push_enabled), reminderDays: Number(row.reminder_days || 2), updatedAt: row.updated_at || null }; }
 function mapNotificationDelivery(row) { return { id: row.id, userId: row.user_id, billId: row.bill_id, scheduledFor: row.scheduled_for, status: row.status, providerMessageId: row.provider_message_id, error: row.error }; }
+function mapAccountantAccess(row) { return { id: row.id, ownerUserId: row.owner_user_id || row.ownerUserId, accountantEmail: row.accountant_email || row.accountantEmail, createdAt: row.created_at || row.createdAt }; }
 function mapFeedback(row) { return { id: row.id, userId: row.user_id || row.userId, rating: Number(row.rating), message: row.message, response: row.response || null, respondedAt: row.responded_at || row.respondedAt || null, createdAt: row.created_at || row.createdAt }; }
 function mapUser(row, includePassword = false) {
   const user = { id: row.id, email: row.email, cpfHash: row.cpf_hash, identifierType: row.identifier_type, identifierLabel: row.identifier_label, name: row.name || row.identifier_label, avatarData: row.avatar_data || null, role: row.role, active: Boolean(row.active), createdAt: row.created_at };

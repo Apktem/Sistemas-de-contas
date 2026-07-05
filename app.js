@@ -1,5 +1,16 @@
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const decimalMoney = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const shoppingCatalog = {
+  "Mercearia": { icon: "🛒", items: ["Arroz", "Feijão", "Macarrão", "Óleo", "Açúcar", "Café"] },
+  "Carnes e peixes": { icon: "🥩", items: ["Carne bovina", "Frango", "Peixe", "Linguiça"] },
+  "Hortifruti": { icon: "🥦", items: ["Banana", "Maçã", "Tomate", "Batata", "Cebola", "Alface"] },
+  "Bebidas": { icon: "🥤", items: ["Água", "Coca-Cola", "Pepsi", "Fanta", "Suco"] },
+  "Padaria": { icon: "🍞", items: ["Pão", "Bolo", "Biscoito", "Torrada"] },
+  "Laticínios": { icon: "🥛", items: ["Leite", "Queijo", "Iogurte", "Manteiga"] },
+  "Limpeza": { icon: "🧽", items: ["Detergente", "Sabão", "Desinfetante", "Água sanitária"] },
+  "Higiene": { icon: "🧴", items: ["Sabonete", "Shampoo", "Pasta de dente", "Papel higiênico"] },
+  "Outros": { icon: "📦", items: [] },
+};
 const defaultCategories = ["Moradia", "Servicos", "Cartao", "Impostos", "Saude", "Equipe", "Outros"];
 
 function formatMoneyInput(value, forceDecimals = false) {
@@ -15,7 +26,7 @@ function formatMoneyInput(value, forceDecimals = false) {
 function parseMoneyInput(value) {
   return Number(String(value || "0").replace(/\./g, "").replace(",", "."));
 }
-const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [], categories: [] };
+const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [], categories: [], financialEntries: [], accountants: [], accountantCompanies: [], accountantReport: null, shoppingItems: [], shoppingCategory: "Mercearia" };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -57,7 +68,7 @@ async function enterApp(user) {
   $("#adminNav").classList.toggle("hidden", user.role !== "admin");
   els.loginScreen.classList.add("hidden");
   els.appScreen.classList.remove("hidden");
-  await Promise.all([loadData(), loadSubscription(), loadNotificationPreferences()]);
+  await Promise.all([loadData(), loadSubscription(), loadNotificationPreferences(), loadAccountantContext()]);
   if (new URLSearchParams(location.search).get("assinatura") === "retorno") {
     history.replaceState({}, "", location.pathname);
     await loadSubscription(true);
@@ -107,6 +118,8 @@ async function loadData() {
   state.cards = data.cards;
   state.incomes = data.incomes || [];
   state.categories = data.categories || [];
+  state.financialEntries = data.financialEntries || [];
+  state.shoppingItems = data.shoppingItems || [];
   render();
 }
 
@@ -141,6 +154,7 @@ function renderSubscription() {
   const subscription = state.subscription;
   if (!subscription) return;
   const isPro = subscription.plan === "pro";
+  const canAccessCompany = isPro || state.accountantCompanies.length > 0;
   const labels = { authorized: "Ativa", pending: "Aguardando pagamento", paused: "Pausada", cancelled: "Cancelada", pix_pending: "Aguardando Pix", pix_authorized: "Pix confirmado", pix_rejected: "Pix não aprovado", pix_cancelled: "Pix cancelado" };
   $("#subscriptionTitle").textContent = isPro ? "Plano Pro" : "Plano Grátis";
   const dateLabel = subscription.billingType === "pix" ? "acesso liberado até" : "próxima cobrança em";
@@ -160,8 +174,8 @@ function renderSubscription() {
   $(".plan-option:first-child .plan-label").textContent = isPro ? "Plano disponível" : "Plano atual";
   $(".plan-option.featured .plan-label").textContent = isPro ? "Plano atual" : "Mais completo";
   const companyButton = $('[data-workspace="Empresa"]');
-  companyButton.classList.toggle("locked", !isPro);
-  if (!isPro && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
+  companyButton.classList.toggle("locked", !canAccessCompany);
+  if (!canAccessCompany && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
 setCardDateDefaults();
   renderIncome();
   if (isPro) {
@@ -220,6 +234,9 @@ function render() {
   renderChartsView();
   renderLists();
   renderTable();
+  renderFinancialEntries();
+  renderDre();
+  renderShopping();
   renderCategoryOptions();
   renderCards();
   renderForecast();
@@ -394,6 +411,86 @@ function renderTable() {
   }).join("") : '<tr><td colspan="6">Nenhuma conta cadastrada para este período.</td></tr>';
 }
 
+function selectShoppingCategory(category) {
+  state.shoppingCategory = category; $("#shoppingCategory").value = category; $("#shoppingSelectedCategory").textContent = category;
+  $$("[data-shopping-category]").forEach((button) => button.classList.toggle("active", button.dataset.shoppingCategory === category));
+  $("#shoppingSuggestions").innerHTML = shoppingCatalog[category].items.map((item) => `<button type="button" data-shopping-suggestion="${escapeHtml(item)}">+ ${escapeHtml(item)}</button>`).join("");
+}
+
+function renderShopping() {
+  $("#shoppingCategories").innerHTML = Object.entries(shoppingCatalog).map(([name, data]) => `<button class="shopping-category ${name === state.shoppingCategory ? "active" : ""}" data-shopping-category="${escapeHtml(name)}" type="button"><span aria-hidden="true">${data.icon}</span><strong>${escapeHtml(name)}</strong></button>`).join("");
+  selectShoppingCategory(state.shoppingCategory);
+  const checked = state.shoppingItems.filter((item) => item.checked).length, total = state.shoppingItems.length, percent = total ? Math.round((checked / total) * 100) : 0;
+  $("#shoppingProgressText").textContent = `${checked} de ${total} itens no carrinho`; $("#shoppingProgressPercent").textContent = `${percent}%`; $("#shoppingProgressBar").style.width = `${percent}%`; $("#shoppingItemCount").textContent = `${total} ${total === 1 ? "item" : "itens"}`;
+  const groups = Object.keys(shoppingCatalog).map((category) => [category, state.shoppingItems.filter((item) => item.category === category)]).filter(([, items]) => items.length);
+  $("#shoppingList").innerHTML = groups.length ? groups.map(([category, items]) => `<section class="shopping-group"><h3><span aria-hidden="true">${shoppingCatalog[category]?.icon || "📦"}</span>${escapeHtml(category)}</h3>${items.map((item) => `<div class="shopping-item ${item.checked ? "checked" : ""}"><button class="shopping-check" data-shopping-toggle="${item.id}" type="button" aria-label="${item.checked ? "Desmarcar" : "Marcar"} ${escapeHtml(item.name)}"><span>${item.checked ? "✓" : ""}</span><div><strong>${escapeHtml(item.name)}</strong><small>${item.quantity} ${escapeHtml(item.unit)}</small></div></button><button class="icon-button shopping-delete" data-shopping-delete="${item.id}" type="button" aria-label="Excluir ${escapeHtml(item.name)}">×</button></div>`).join("")}</section>`).join("") : '<p class="muted empty-state">Sua lista está vazia. Escolha uma seção e adicione o primeiro produto.</p>';
+}
+function dreData(bills = state.bills, entries = state.financialEntries, profile = "Empresa") {
+  const month = els.monthFilter.value;
+  const scopedEntries = entries.filter((entry) => entry.profile === profile && entry.date.startsWith(month));
+  const revenueEntries = scopedEntries.filter((entry) => (entry.type === "income" || entry.type === "receivable") && entry.status === "settled");
+  const variableEntries = scopedEntries.filter((entry) => entry.type === "variable_expense");
+  const fixedBills = bills.filter((bill) => bill.profile === profile && bill.dueDate.startsWith(month));
+  const revenue = revenueEntries.reduce((sum, item) => sum + Number(item.amount), 0);
+  const variable = variableEntries.reduce((sum, item) => sum + Number(item.amount), 0);
+  const fixed = fixedBills.reduce((sum, item) => sum + Number(item.amount), 0);
+  const groups = new Map();
+  [...variableEntries.map((item) => ({ category: item.category, amount: -Number(item.amount) })), ...fixedBills.map((item) => ({ category: item.category, amount: -Number(item.amount) })), ...revenueEntries.map((item) => ({ category: item.category, amount: Number(item.amount) }))].forEach((item) => groups.set(item.category, (groups.get(item.category) || 0) + item.amount));
+  return { revenue, variable, fixed, result: revenue - variable - fixed, groups: [...groups.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])) };
+}
+
+function dreLinesHtml(data) {
+  const lines = [["(+) Receita reconhecida", data.revenue, "positive"], ["(-) Gastos variáveis", -data.variable, "negative"], ["(-) Custos e contas", -data.fixed, "negative"], ["(=) Resultado líquido", data.result, data.result >= 0 ? "positive" : "negative"]];
+  return `<div class="dre-main-lines">${lines.map(([label, value, className]) => `<div class="dre-line ${className}"><span>${label}</span><strong>${money.format(value)}</strong></div>`).join("")}</div><h3>Composição por categoria</h3>${data.groups.length ? data.groups.map(([category, value]) => `<div class="dre-line"><span>${escapeHtml(category)}</span><strong class="${value >= 0 ? "positive" : "negative"}">${money.format(value)}</strong></div>`).join("") : '<p class="muted empty-state">Sem movimentações neste período.</p>'}`;
+}
+
+function renderDre() {
+  const data = dreData();
+  $("#dreRevenue").textContent = money.format(data.revenue); $("#dreVariable").textContent = money.format(data.variable); $("#dreFixed").textContent = money.format(data.fixed); $("#dreResult").textContent = money.format(data.result);
+  $("#dreMargin").textContent = `Margem de ${data.revenue ? Math.round((data.result / data.revenue) * 100) : 0}%`;
+  $("#dreResultMetric").classList.toggle("paid", data.result >= 0); $("#dreResultMetric").classList.toggle("late", data.result < 0);
+  $("#drePeriod").textContent = new Date(`${els.monthFilter.value}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  $("#dreLines").innerHTML = dreLinesHtml(data);
+}
+
+async function loadAccountantContext() {
+  try {
+    const [own, shared] = await Promise.all([api("/api/accountants"), api("/api/accountant/companies")]);
+    state.accountants = own.accountants; state.accountantCompanies = shared.companies;
+    renderAccountantAccess();
+    if (state.subscription) renderSubscription();
+  } catch (error) { setMessage($("#accountantMessage"), error.message); }
+}
+
+function renderAccountantAccess() {
+  $("#accountantList").innerHTML = state.accountants.length ? state.accountants.map((access) => `<div class="access-row"><div><strong>${escapeHtml(access.accountantEmail)}</strong><small>Somente leitura</small></div><button class="small-button action-delete" data-accountant-delete="${access.id}" type="button">Remover</button></div>`).join("") : '<p class="muted empty-state">Nenhum contador cadastrado.</p>';
+  $("#accountantCompanies").innerHTML = state.accountantCompanies.length ? state.accountantCompanies.map((access) => `<button class="access-row access-company" data-accountant-company="${access.ownerUserId}" type="button"><div><strong>${escapeHtml(access.owner?.name || "Empresa")}</strong><small>${escapeHtml(access.owner?.email || access.owner?.identifierLabel || "")}</small></div><span>Ver DRE</span></button>`).join("") : '<p class="muted empty-state">Nenhuma empresa compartilhou acesso com esta conta.</p>';
+}
+const entryViewConfig = {
+  income: { list: "#incomeEntriesList", total: "#incomeEntriesTotal", count: "#incomeEntriesCount", settled: "Recebido", pending: "A receber" },
+  variable_expense: { list: "#variableExpensesList", total: "#variableExpensesTotal", count: "#variableExpensesCount", settled: "Pago", pending: "Pendente" },
+  receivable: { list: "#receivablesList", total: "#receivablesTotal", count: "#receivablesCount", settled: "Recebido", pending: "A receber" },
+};
+
+function filteredFinancialEntries(type) {
+  return state.financialEntries.filter((entry) => entry.type === type && entry.profile === els.profileFilter.value && entry.date.startsWith(els.monthFilter.value)).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function renderFinancialEntries() {
+  Object.entries(entryViewConfig).forEach(([type, config]) => {
+    const entries = filteredFinancialEntries(type);
+    $(config.total).textContent = money.format(entries.reduce((sum, entry) => sum + Number(entry.amount), 0));
+    $(config.count).textContent = `${entries.length} ${entries.length === 1 ? "lançamento" : "lançamentos"}`;
+    $(config.list).innerHTML = entries.length ? entries.map((entry) => `<article class="entry-row"><div><strong>${escapeHtml(entry.description)}</strong><span>${escapeHtml(entry.category)} · ${formatDate(entry.date)}</span>${entry.notes ? `<small>${escapeHtml(entry.notes)}</small>` : ""}</div><strong>${money.format(entry.amount)}</strong><span class="badge ${entry.status === "settled" ? "active" : "pending"}">${entry.status === "settled" ? config.settled : config.pending}</span><div class="row-actions"><button class="small-button action-pay" data-entry-action="toggle" data-entry-id="${entry.id}" type="button">${entry.status === "settled" ? "Reabrir" : type === "variable_expense" ? "Pagar" : "Receber"}</button><button class="small-button action-edit" data-entry-action="edit" data-entry-id="${entry.id}" type="button">Editar</button><button class="small-button action-delete" data-entry-action="delete" data-entry-id="${entry.id}" type="button">Excluir</button></div></article>`).join("") : '<p class="muted empty-state">Nenhum lançamento neste mês.</p>';
+  });
+}
+
+function resetEntryForm(form) {
+  form.reset();
+  form.elements.id.value = "";
+  form.elements.date.value = `${els.monthFilter.value}-01`;
+  form.querySelector(".cancel-entry").classList.add("hidden");
+}
 function renderCategoryOptions(selected = $("#billCategory").value) {
   const names = [...defaultCategories, ...state.categories.map((category) => category.name)];
   $("#billCategory").innerHTML = names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
@@ -442,7 +539,7 @@ function setWorkspace(profile, remember = true) {
 }
 
 function selectWorkspace(profile) {
-  if (profile === "Empresa" && state.subscription?.plan !== "pro") {
+  if (profile === "Empresa" && state.subscription?.plan !== "pro" && !state.accountantCompanies.length) {
     switchView("subscription", "Assinatura");
     setMessage(els.appMessage, "A área Empresa está disponível no plano Pro.");
     return;
@@ -638,12 +735,53 @@ $("#adminFeedbackList").addEventListener("submit", async (event) => {
     setMessage(els.appMessage, "Resposta enviada ao cliente.", true);
   } catch (error) { setMessage(els.appMessage, error.message); }
 });
-$$('[data-view]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view, button.textContent.trim())));
+function openMobileMenu() { document.body.classList.add("menu-open"); $("#openMobileMenu").setAttribute("aria-expanded", "true"); }
+function closeMobileMenu() { document.body.classList.remove("menu-open"); $("#openMobileMenu").setAttribute("aria-expanded", "false"); }
+$("#openMobileMenu").addEventListener("click", openMobileMenu);
+$("#closeMobileMenu").addEventListener("click", closeMobileMenu);
+$("#menuBackdrop").addEventListener("click", closeMobileMenu);
+window.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobileMenu(); });
+$$('[data-view]').forEach((button) => button.addEventListener("click", () => { switchView(button.dataset.view, button.textContent.trim()); closeMobileMenu(); }));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); els.cardForm.reset(); setCardDateDefaults(); render(); });
 ["#upcomingList", "#reminderList"].forEach((selector) => $(selector).addEventListener("click", (event) => {
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);
 }));
+$("#shoppingCategories").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-category]"); if (button) selectShoppingCategory(button.dataset.shoppingCategory); });
+$("#shoppingSuggestions").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-suggestion]"); if (!button) return; $("#shoppingName").value = button.dataset.shoppingSuggestion; $("#shoppingName").focus(); });
+$("#shoppingForm").addEventListener("submit", async (event) => { event.preventDefault(); try { const item = await api("/api/shopping-items", { method: "POST", body: JSON.stringify({ name: $("#shoppingName").value, category: $("#shoppingCategory").value, quantity: Number($("#shoppingQuantity").value), unit: $("#shoppingUnit").value }) }); state.shoppingItems.push(item); $("#shoppingName").value = ""; $("#shoppingQuantity").value = "1"; renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
+$("#shoppingList").addEventListener("click", async (event) => { const toggle = event.target.closest("[data-shopping-toggle]"), remove = event.target.closest("[data-shopping-delete]"); const id = toggle?.dataset.shoppingToggle || remove?.dataset.shoppingDelete; if (!id) return; const item = state.shoppingItems.find((entry) => entry.id === id); try { if (toggle) { const updated = await api(`/api/shopping-items/${id}`, { method: "PATCH", body: JSON.stringify({ checked: !item.checked }) }); state.shoppingItems[state.shoppingItems.findIndex((entry) => entry.id === id)] = updated; } else { await api(`/api/shopping-items/${id}`, { method: "DELETE" }); state.shoppingItems = state.shoppingItems.filter((entry) => entry.id !== id); } renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
+$("#clearCheckedShopping").addEventListener("click", async () => { if (!state.shoppingItems.some((item) => item.checked)) return; try { await api("/api/shopping-items/checked", { method: "DELETE" }); state.shoppingItems = state.shoppingItems.filter((item) => !item.checked); renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
+$("#accountantForm").addEventListener("submit", async (event) => { event.preventDefault(); setMessage($("#accountantMessage")); try { state.accountants.unshift(await api("/api/accountants", { method: "POST", body: JSON.stringify({ email: $("#accountantEmail").value }) })); $("#accountantForm").reset(); renderAccountantAccess(); setMessage($("#accountantMessage"), "Acesso do contador liberado.", true); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
+$("#accountantList").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-delete]"); if (!button) return; try { await api(`/api/accountants/${button.dataset.accountantDelete}`, { method: "DELETE" }); state.accountants = state.accountants.filter((item) => item.id !== button.dataset.accountantDelete); renderAccountantAccess(); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
+$("#accountantCompanies").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-company]"); if (!button) return; try { const report = await api(`/api/accountant/companies/${button.dataset.accountantCompany}`); state.accountantReport = report; const data = dreData(report.bills, report.financialEntries, "Empresa"); $("#accountantReportTitle").textContent = `DRE · ${report.company.owner?.name || "Empresa"}`; $("#accountantReportPeriod").textContent = new Date(`${els.monthFilter.value}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); $("#accountantReportLines").innerHTML = dreLinesHtml(data); $("#accountantReport").classList.remove("hidden"); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
+$$('.financial-entry-form').forEach((form) => {
+  resetEntryForm(form);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = form.elements.id.value;
+    const entry = { type: form.dataset.type, profile: els.profileFilter.value, description: form.elements.description.value.trim(), amount: parseMoneyInput(form.elements.amount.value), date: form.elements.date.value, category: form.elements.category.value.trim(), status: form.elements.status.value, notes: form.elements.notes.value.trim() };
+    try {
+      const saved = await api(id ? `/api/financial-entries/${id}` : "/api/financial-entries", { method: id ? "PUT" : "POST", body: JSON.stringify(entry) });
+      if (id) state.financialEntries[state.financialEntries.findIndex((item) => item.id === id)] = saved; else state.financialEntries.push(saved);
+      resetEntryForm(form); renderFinancialEntries(); setMessage(els.appMessage, "Lançamento salvo.", true);
+    } catch (error) { setMessage(els.appMessage, error.message); }
+  });
+  form.querySelector(".cancel-entry").addEventListener("click", () => resetEntryForm(form));
+});
+$$('.entry-list').forEach((list) => list.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-entry-action]"); if (!button) return;
+  const entry = state.financialEntries.find((item) => item.id === button.dataset.entryId); if (!entry) return;
+  try {
+    if (button.dataset.entryAction === "delete") { await api(`/api/financial-entries/${entry.id}`, { method: "DELETE" }); state.financialEntries = state.financialEntries.filter((item) => item.id !== entry.id); }
+    if (button.dataset.entryAction === "toggle") { const updated = await api(`/api/financial-entries/${entry.id}`, { method: "PUT", body: JSON.stringify({ ...entry, status: entry.status === "settled" ? "pending" : "settled" }) }); state.financialEntries[state.financialEntries.findIndex((item) => item.id === entry.id)] = updated; }
+    if (button.dataset.entryAction === "edit") { const form = $(`.financial-entry-form[data-type="${entry.type}"]`); form.elements.id.value = entry.id; form.elements.description.value = entry.description; form.elements.amount.value = decimalMoney.format(entry.amount); form.elements.date.value = entry.date; form.elements.category.value = entry.category; form.elements.status.value = entry.status; form.elements.notes.value = entry.notes || ""; form.querySelector(".cancel-entry").classList.remove("hidden"); form.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    renderFinancialEntries();
+  renderDre();
+  renderShopping();
+  } catch (error) { setMessage(els.appMessage, error.message); }
+}));
+$$('.money-input').forEach((input) => { input.addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); }); input.addEventListener("blur", (event) => { event.target.value = formatMoneyInput(event.target.value, true); }); });
 ["#billAmount", "#cardLimit"].forEach((selector) => {
   $(selector).addEventListener("input", (event) => { event.target.value = formatMoneyInput(event.target.value); });
   $(selector).addEventListener("blur", (event) => { event.target.value = formatMoneyInput(event.target.value, true); });

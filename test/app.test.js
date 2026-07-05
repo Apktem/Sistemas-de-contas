@@ -236,6 +236,52 @@ test("cria parcelas futuras com tags e clona contas recorrentes", async (context
   assert.deepEqual(cloned.body.tags, ["fixa"]);
 });
 
+test("registra lançamentos separados por área e usuário", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1"); await once(server, "listening"); context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const admin = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
+  const user = await post(base, "/api/register", { identifier: "movimentos@example.com", password: "SenhaForte123" });
+  assert.equal((await post(base, "/api/financial-entries", { type: "income", profile: "Casa", description: "Salário", amount: 5000, date: "2026-07-05", category: "Salário", status: "settled", notes: "" }, user.cookie)).status, 201);
+  assert.equal((await post(base, "/api/financial-entries", { type: "income", profile: "Empresa", description: "Venda", amount: 8000, date: "2026-07-05", category: "Vendas", status: "settled", notes: "" }, user.cookie)).status, 402);
+  const company = await post(base, "/api/financial-entries", { type: "receivable", profile: "Empresa", description: "Cliente A", amount: 2500, date: "2026-07-10", category: "Serviços", status: "pending", notes: "NF 10" }, admin.cookie);
+  assert.equal(company.status, 201);
+  assert.equal((await get(base, "/api/data", user.cookie)).body.financialEntries.length, 1);
+  assert.equal((await get(base, "/api/data", admin.cookie)).body.financialEntries[0].profile, "Empresa");
+});
+
+test("contador acessa DRE compartilhada somente para leitura", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1"); await once(server, "listening"); context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const owner = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
+  const accountant = await post(base, "/api/register", { identifier: "contador@example.com", password: "SenhaForte123" });
+  const outsider = await post(base, "/api/register", { identifier: "outro@example.com", password: "SenhaForte123" });
+  const entry = await post(base, "/api/financial-entries", { type: "income", profile: "Empresa", description: "Venda", amount: 9000, date: "2026-07-05", category: "Vendas", status: "settled", notes: "" }, owner.cookie);
+  assert.equal((await post(base, "/api/accountants", { email: "contador@example.com" }, owner.cookie)).status, 201);
+  const companies = await get(base, "/api/accountant/companies", accountant.cookie);
+  assert.equal(companies.body.companies.length, 1);
+  assert.equal((await get(base, `/api/accountant/companies/${owner.body.user.id}`, accountant.cookie)).body.financialEntries[0].amount, 9000);
+  assert.equal((await get(base, `/api/accountant/companies/${owner.body.user.id}`, outsider.cookie)).status, 403);
+  assert.equal((await put(base, `/api/financial-entries/${entry.body.id}`, { ...entry.body, amount: 1 }, accountant.cookie)).status, 402);
+});
+
+test("lista de compras é privada e permite concluir itens", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1"); await once(server, "listening"); context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const first = await post(base, "/api/register", { identifier: "compras1@example.com", password: "SenhaForte123" });
+  const second = await post(base, "/api/register", { identifier: "compras2@example.com", password: "SenhaForte123" });
+  const item = await post(base, "/api/shopping-items", { name: "Carne bovina", category: "Carnes e peixes", quantity: 2, unit: "kg" }, first.cookie);
+  assert.equal(item.status, 201);
+  assert.equal((await get(base, "/api/data", second.cookie)).body.shoppingItems.length, 0);
+  assert.equal((await patch(base, `/api/shopping-items/${item.body.id}`, { checked: true }, first.cookie)).body.checked, true);
+  assert.equal((await remove(base, "/api/shopping-items/checked", first.cookie)).body.removed, 1);
+  assert.equal((await get(base, "/api/data", first.cookie)).body.shoppingItems.length, 0);
+});
 test("isola categorias personalizadas por usuário", async (context) => {
   const storage = new MemoryStorage();
   const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
@@ -324,6 +370,10 @@ async function get(base, path, cookie) {
 async function put(base, path, body, cookie = "") {
   const response = await fetch(`${base}${path}`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
   return { status: response.status, body: await response.json() };
+}
+async function remove(base, path, cookie = "") {
+  const response = await fetch(`${base}${path}`, { method: "DELETE", headers: { Cookie: cookie } });
+  return { status: response.status, body: response.status === 204 ? null : await response.json() };
 }
 async function patch(base, path, body, cookie = "") {
   const response = await fetch(`${base}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });

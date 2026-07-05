@@ -50,6 +50,39 @@ create table if not exists public.monthly_incomes (
 
 create index if not exists monthly_incomes_user_month_idx on public.monthly_incomes(user_id, month);
 
+create table if not exists public.shopping_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  name text not null,
+  category text not null,
+  quantity numeric(10,2) not null check (quantity > 0),
+  unit text not null check (unit in ('un','kg','g','L','ml','pct','cx')),
+  checked boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists shopping_items_user_idx on public.shopping_items(user_id);
+create table if not exists public.accountant_accesses (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.users(id) on delete cascade,
+  accountant_email text not null,
+  created_at timestamptz not null default now(),
+  unique (owner_user_id, accountant_email)
+);
+create index if not exists accountant_accesses_email_idx on public.accountant_accesses(accountant_email);
+create table if not exists public.financial_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  entry_type text not null check (entry_type in ('income', 'variable_expense', 'receivable')),
+  profile text not null check (profile in ('Casa', 'Empresa')),
+  description text not null,
+  amount numeric(12,2) not null check (amount > 0),
+  entry_date date not null,
+  category text not null,
+  status text not null check (status in ('pending', 'settled')),
+  notes text,
+  created_at timestamptz not null default now()
+);
+create index if not exists financial_entries_user_date_idx on public.financial_entries(user_id, entry_date);
 create table if not exists public.user_categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
@@ -149,6 +182,9 @@ alter table public.users enable row level security;
 alter table public.bills enable row level security;
 alter table public.cards enable row level security;
 alter table public.user_categories enable row level security;
+alter table public.financial_entries enable row level security;
+alter table public.accountant_accesses enable row level security;
+alter table public.shopping_items enable row level security;
 alter table public.monthly_incomes enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.notification_preferences enable row level security;
@@ -157,6 +193,6 @@ alter table public.push_subscriptions enable row level security;
 alter table public.password_reset_tokens enable row level security;
 alter table public.feedbacks enable row level security;
 
-revoke all on public.users, public.bills, public.cards, public.user_categories, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
+revoke all on public.users, public.bills, public.cards, public.user_categories, public.financial_entries, public.accountant_accesses, public.shopping_items, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
 revoke all on public.password_reset_tokens from anon, authenticated;
 revoke all on public.feedbacks from anon, authenticated;
