@@ -442,7 +442,7 @@ export async function createApp(options = {}) {
   if (hasBuild) {
     app.use(express.static(distRoot, { index: false, maxAge: production ? "1h" : 0 }));
   } else {
-    ["app.js", "styles.css", "landing.css", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
+    ["app.js", "styles.css", "landing.css", "landing.js", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
       app.get(`/${file}`, (_req, res) => res.sendFile(path.join(root, file)));
     });
   }
