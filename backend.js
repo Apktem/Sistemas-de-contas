@@ -437,6 +437,16 @@ export async function createApp(options = {}) {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(path.join(root, "manifest.webmanifest"));
   });
+  app.get("/robots.txt", (_req, res) => {
+    res.type("text/plain");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(root, "robots.txt"));
+  });
+  app.get("/sitemap.xml", (_req, res) => {
+    res.type("application/xml");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(root, "sitemap.xml"));
+  });
   const distRoot = path.join(root, "dist");
   const hasBuild = existsSync(path.join(distRoot, "index.html"));
   if (hasBuild) {
