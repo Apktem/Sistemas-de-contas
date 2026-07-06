@@ -165,7 +165,9 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
 .shopping-item.checked { opacity: .55; }
 .shopping-item.checked .shopping-check > span { border-color: var(--paid); background: var(--paid); }
 .shopping-item.checked strong { text-decoration: line-through; }
-.shopping-delete { border: 0; background: transparent; }.dre-lines, .dre-main-lines, .access-list { display: grid; gap: 10px; }
+.shopping-delete { border: 0; background: transparent; }
+.shopping-checkout-form { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(170px, .7fr) auto; gap: 12px; align-items: end; }
+.dre-lines, .dre-main-lines, .access-list { display: grid; gap: 10px; }
 .dre-main-lines { margin-bottom: 20px; }
 .dre-lines h3 { margin: 12px 0 2px; font-size: .95rem; }
 .dre-line, .access-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px; border-bottom: 1px solid var(--line); }
@@ -295,6 +297,12 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
 @media (max-width: 1000px) {
   .summary-grid, .chart-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .data-form, .notification-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-grid { grid-template-columns: 1fr; }
+  .plan-option { grid-template-columns: minmax(160px, .7fr) minmax(0, 1.3fr); }
+  .subscription-panel { max-width: none; }
+  .subscription-form, .shopping-checkout-form { grid-template-columns: 1fr; }
+  .payment-buttons { align-items: stretch; flex-direction: column; }
+  .payment-buttons > * { width: 100%; }
 }
 
 @media (max-width: 800px) {
@@ -355,4 +363,9 @@ th { color: var(--muted); font-size: .78rem; text-transform: uppercase; }
   .client-manager, .client-profile-form, .income-form, .income-summary, .feedback-reply-form, .category-field, .shopping-form { grid-template-columns: 1fr; }
   .category-row { grid-template-columns: 72px minmax(70px, 1fr) 90px; }
   .avatar-editor { grid-row: auto; }
+  .shopping-categories { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .shopping-category { min-height: 66px; gap: 3px; padding: 6px 3px; font-size: .7rem; line-height: 1.15; }
+  .shopping-category span { font-size: 1.15rem; }
+  .shopping-suggestions { gap: 6px; margin-top: 10px; }
+  .shopping-suggestions button { min-height: 30px; padding: 0 9px; font-size: .75rem; }
 }

@@ -172,7 +172,8 @@ svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-wi
 
 @media (max-width: 1080px) {
   .header-inner { gap: 20px; }.main-nav { gap: 18px; }
-  .hero h1 { font-size: 3.75rem; }.hero-dashboard { right: -210px; opacity: .7; }
+  .hero-copy { width: min(760px, 100%); }
+  .hero h1 { font-size: 3.75rem; }.hero-dashboard { display: none; }
   .feature-grid { grid-template-columns: repeat(2, 1fr); }
   .product-section, .areas-section { grid-template-columns: 1fr; gap: 48px; }
   .product-copy, .areas-section .section-heading { max-width: 760px; }
@@ -184,12 +185,12 @@ svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-wi
   .header-inner { width: min(100% - 28px, var(--container)); min-height: 66px; grid-template-columns: auto 1fr; }
   .main-nav { position: fixed; z-index: 30; top: 66px; right: 0; left: 0; display: grid; gap: 0; padding: 12px 20px 20px; border-bottom: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); transform: translateY(-130%); visibility: hidden; transition: transform .22s ease, visibility .22s ease; }
   .menu-open .main-nav { transform: translateY(0); visibility: visible; }.main-nav a { padding: 14px 4px; border-bottom: 1px solid var(--line); }.header-actions { justify-self: end; }.header-actions .text-link { display: none; }.menu-button { display: grid; }.header-cta { min-height: 40px; padding: 0 13px; font-size: .78rem; }
-  .hero { min-height: 640px; }.hero-inner { padding: 52px 0 60px; }.hero-copy { width: min(630px, 86%); }.hero h1 { font-size: 3.35rem; }.hero-dashboard { right: -300px; opacity: .3; }
+  .hero { min-height: 640px; }.hero-inner { padding: 52px 0 60px; }.hero-copy { width: 100%; }.hero h1 { font-size: 3.35rem; }
   .trust-strip { grid-template-columns: 1fr 1fr; padding: 0 20px; }.trust-strip div, .trust-strip div:first-child { border: 0; border-bottom: 1px solid var(--line); }
   .section, .areas-section, .app-section { padding-top: 74px; padding-bottom: 74px; }
   .section-heading h2, .product-copy h2, .app-copy h2, .final-cta h2 { font-size: 2.35rem; }
   .app-section { grid-template-columns: .8fr 1.2fr; gap: 28px; }.phone-frame { width: 260px; }.phone-scene { height: 550px; }
-  .plan-grid { gap: 14px; }.plan-card { padding: 26px; }
+  .plan-grid { max-width: 620px; grid-template-columns: 1fr; gap: 22px; }.plan-card { min-height: 0; padding: 26px; }
   .footer-main { grid-template-columns: 1.4fr 1fr 1fr; }.footer-contact { grid-column: 2 / -1; }
 }
 

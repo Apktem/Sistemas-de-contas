@@ -776,11 +776,31 @@ $("#monthTabs").addEventListener("click", (event) => {
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);
 }));
-$("#shoppingCategories").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-category]"); if (button) selectShoppingCategory(button.dataset.shoppingCategory); });
-$("#shoppingSuggestions").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-suggestion]"); if (!button) return; $("#shoppingName").value = button.dataset.shoppingSuggestion; $("#shoppingName").focus(); });
+$("#shoppingCategories").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-category]"); if (!button) return; document.activeElement?.blur(); selectShoppingCategory(button.dataset.shoppingCategory); });
+$("#shoppingSuggestions").addEventListener("click", (event) => { const button = event.target.closest("[data-shopping-suggestion]"); if (!button) return; document.activeElement?.blur(); $("#shoppingName").value = button.dataset.shoppingSuggestion; });
 $("#shoppingForm").addEventListener("submit", async (event) => { event.preventDefault(); try { const item = await api("/api/shopping-items", { method: "POST", body: JSON.stringify({ name: $("#shoppingName").value, category: $("#shoppingCategory").value, quantity: Number($("#shoppingQuantity").value), unit: $("#shoppingUnit").value }) }); state.shoppingItems.push(item); $("#shoppingName").value = ""; $("#shoppingQuantity").value = "1"; renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
 $("#shoppingList").addEventListener("click", async (event) => { const toggle = event.target.closest("[data-shopping-toggle]"), remove = event.target.closest("[data-shopping-delete]"); const id = toggle?.dataset.shoppingToggle || remove?.dataset.shoppingDelete; if (!id) return; const item = state.shoppingItems.find((entry) => entry.id === id); try { if (toggle) { const updated = await api(`/api/shopping-items/${id}`, { method: "PATCH", body: JSON.stringify({ checked: !item.checked }) }); state.shoppingItems[state.shoppingItems.findIndex((entry) => entry.id === id)] = updated; } else { await api(`/api/shopping-items/${id}`, { method: "DELETE" }); state.shoppingItems = state.shoppingItems.filter((entry) => entry.id !== id); } renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
 $("#clearCheckedShopping").addEventListener("click", async () => { if (!state.shoppingItems.some((item) => item.checked)) return; try { await api("/api/shopping-items/checked", { method: "DELETE" }); state.shoppingItems = state.shoppingItems.filter((item) => !item.checked); renderShopping(); } catch (error) { setMessage(els.appMessage, error.message); } });
+$("#shoppingPurchaseDate").value = new Date().toLocaleDateString("en-CA");
+$("#shoppingCheckoutForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage($("#shoppingCheckoutMessage"));
+  const amount = parseMoneyInput($("#shoppingTotal").value);
+  if (!amount) return setMessage($("#shoppingCheckoutMessage"), "Informe o valor total da compra.");
+  const checkedItems = state.shoppingItems.filter((item) => item.checked);
+  try {
+    const saved = await api("/api/financial-entries", { method: "POST", body: JSON.stringify({ type: "variable_expense", profile: "Casa", description: "Compra no supermercado", amount, date: $("#shoppingPurchaseDate").value, category: "Supermercado", status: "settled", notes: checkedItems.length ? `${checkedItems.length} ${checkedItems.length === 1 ? "item comprado" : "itens comprados"}` : "Compra finalizada pela lista de compras" }) });
+    state.financialEntries.push(saved);
+    if (checkedItems.length) {
+      await api("/api/shopping-items/checked", { method: "DELETE" });
+      state.shoppingItems = state.shoppingItems.filter((item) => !item.checked);
+    }
+    $("#shoppingCheckoutForm").reset();
+    $("#shoppingPurchaseDate").value = new Date().toLocaleDateString("en-CA");
+    renderShopping(); renderFinancialEntries(); renderDre();
+    setMessage($("#shoppingCheckoutMessage"), "Compra lançada no financeiro com sucesso.", true);
+  } catch (error) { setMessage($("#shoppingCheckoutMessage"), error.message); }
+});
 $("#accountantForm").addEventListener("submit", async (event) => { event.preventDefault(); setMessage($("#accountantMessage")); try { state.accountants.unshift(await api("/api/accountants", { method: "POST", body: JSON.stringify({ email: $("#accountantEmail").value }) })); $("#accountantForm").reset(); renderAccountantAccess(); setMessage($("#accountantMessage"), "Acesso do contador liberado.", true); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
 $("#accountantList").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-delete]"); if (!button) return; try { await api(`/api/accountants/${button.dataset.accountantDelete}`, { method: "DELETE" }); state.accountants = state.accountants.filter((item) => item.id !== button.dataset.accountantDelete); renderAccountantAccess(); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
 $("#accountantCompanies").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-company]"); if (!button) return; try { const report = await api(`/api/accountant/companies/${button.dataset.accountantCompany}`); state.accountantReport = report; const data = dreData(report.bills, report.financialEntries, "Empresa"); $("#accountantReportTitle").textContent = `DRE · ${report.company.owner?.name || "Empresa"}`; $("#accountantReportPeriod").textContent = new Date(`${els.monthFilter.value}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); $("#accountantReportLines").innerHTML = dreLinesHtml(data); $("#accountantReport").classList.remove("hidden"); } catch (error) { setMessage($("#accountantMessage"), error.message); } });

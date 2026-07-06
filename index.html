@@ -240,6 +240,15 @@
           <section class="panel"><div class="panel-title"><h2>Escolha uma seção</h2><span>Toque para ver sugestões</span></div><div id="shoppingCategories" class="shopping-categories"></div><div id="shoppingSuggestions" class="shopping-suggestions"></div></section>
           <section class="panel"><div class="panel-title"><h2>Adicionar produto</h2><span id="shoppingSelectedCategory">Mercearia</span></div><form id="shoppingForm" class="shopping-form"><label>Produto<input id="shoppingName" type="text" maxlength="100" placeholder="Ex: Arroz" required /></label><label>Quantidade<input id="shoppingQuantity" type="number" min="0.01" max="9999" step="0.01" value="1" required /></label><label>Unidade<select id="shoppingUnit"><option value="un">unidade</option><option value="kg">kg</option><option value="g">g</option><option value="L">litro</option><option value="ml">ml</option><option value="pct">pacote</option><option value="cx">caixa</option></select></label><input id="shoppingCategory" type="hidden" value="Mercearia" /><button class="primary-button" type="submit">Adicionar à lista</button></form></section>
           <section class="panel"><div class="panel-title"><h2>Minha lista</h2><span id="shoppingItemCount">0 itens</span></div><div id="shoppingList" class="shopping-list"></div></section>
+          <section class="panel shopping-checkout-panel">
+            <div class="panel-title"><div><h2>Finalizar compra</h2><p class="muted">Informe o total pago no caixa para lançar a compra no seu financeiro.</p></div></div>
+            <form id="shoppingCheckoutForm" class="shopping-checkout-form">
+              <label>Valor total da compra<input id="shoppingTotal" class="money-input" type="text" inputmode="numeric" placeholder="R$ 0,00" required /></label>
+              <label>Data da compra<input id="shoppingPurchaseDate" type="date" required /></label>
+              <button class="primary-button" type="submit">Finalizar e lançar no financeiro</button>
+            </form>
+            <p id="shoppingCheckoutMessage" class="form-message" aria-live="polite"></p>
+          </section>
         </section>
         <section id="feedbackView" class="view">
           <div class="feedback-grid">
