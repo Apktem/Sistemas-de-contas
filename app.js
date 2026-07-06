@@ -410,7 +410,22 @@ function renderForecast() {
     return { key, count: bills.length, total: bills.reduce((sum, bill) => sum + Number(bill.amount), 0) };
   });
   const max = Math.max(...months.map((item) => item.total), 1);
-  const html = months.map((item) => `<div class="forecast-row"><span>${new Date(`${item.key}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span><div class="forecast-track"><i style="width:${Math.round((item.total / max) * 100)}%"></i></div><strong>${money.format(item.total)}</strong><small>${item.count} ${item.count === 1 ? "conta" : "contas"}</small></div>`).join("");
+  const chartLeft = 46, chartRight = 694, chartTop = 22, chartBottom = 178;
+  const points = months.map((item, index) => ({
+    ...item,
+    label: new Date(`${item.key}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(" de ", "/"),
+    x: chartLeft + (index * (chartRight - chartLeft) / (months.length - 1)),
+    y: chartBottom - ((item.total / max) * (chartBottom - chartTop)),
+  }));
+  const grid = [0, .33, .66, 1].map((ratio) => {
+    const y = chartBottom - (ratio * (chartBottom - chartTop));
+    return `<line x1="${chartLeft}" y1="${y}" x2="${chartRight}" y2="${y}" />`;
+  }).join("");
+  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = `${chartLeft},${chartBottom} ${line} ${chartRight},${chartBottom}`;
+  const markers = points.map((point) => `<g><circle cx="${point.x}" cy="${point.y}" r="5"><title>${point.label}: ${money.format(point.total)} · ${point.count} ${point.count === 1 ? "conta" : "contas"}</title></circle><text x="${point.x}" y="207" text-anchor="middle">${escapeHtml(point.label)}</text></g>`).join("");
+  const details = points.map((point) => `<div><span>${escapeHtml(point.label)}</span><strong>${money.format(point.total)}</strong><small>${point.count} ${point.count === 1 ? "conta" : "contas"}</small></div>`).join("");
+  const html = `<div class="forecast-line-chart" role="img" aria-label="Previsão mensal de despesas para os próximos seis meses"><svg viewBox="0 0 740 220" preserveAspectRatio="none" aria-hidden="true"><g class="forecast-grid">${grid}</g><polygon points="${area}" /><polyline points="${line}" />${markers}</svg><div class="forecast-legend"><i></i><span>Total previsto por mês</span></div><div class="forecast-details">${details}</div></div>`;
   $("#forecastList").innerHTML = html;
   $("#chartsForecastList").innerHTML = html;
 }
