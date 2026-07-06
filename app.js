@@ -44,7 +44,10 @@ async function api(url, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 && !url.includes("/login") && !url.includes("/register")) showAuth();
-    throw new Error(body.error || "Não foi possível concluir a operação.");
+    if (response.status === 402) openUpgradeDialog(body.error);
+    const error = new Error(body.error || "Não foi possível concluir a operação.");
+    error.status = response.status;
+    throw error;
   }
   return body;
 }
@@ -52,6 +55,12 @@ async function api(url, options = {}) {
 function setMessage(target, text = "", success = false) {
   target.textContent = text;
   target.classList.toggle("success", success);
+}
+
+function openUpgradeDialog(message) {
+  $("#upgradeMessage").textContent = message || "Este recurso está disponível no Plano Pro.";
+  const dialog = $("#upgradeDialog");
+  if (!dialog.open) dialog.showModal();
 }
 
 function showAuth() {
@@ -775,6 +784,9 @@ function closeMobileMenu() { document.body.classList.remove("menu-open"); $("#op
 $("#openMobileMenu").addEventListener("click", openMobileMenu);
 $("#closeMobileMenu").addEventListener("click", closeMobileMenu);
 $("#menuBackdrop").addEventListener("click", closeMobileMenu);
+$("#closeUpgradeDialog").addEventListener("click", () => $("#upgradeDialog").close());
+$("#upgradeLater").addEventListener("click", () => $("#upgradeDialog").close());
+$("#upgradeToPro").addEventListener("click", () => { $("#upgradeDialog").close(); switchView("subscription", "Assinatura"); closeMobileMenu(); });
 window.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobileMenu(); });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => { switchView(button.dataset.view, button.textContent.trim()); closeMobileMenu(); }));
 els.monthFilter.addEventListener("change", () => { resetBillForm(); els.cardForm.reset(); setCardDateDefaults(); render(); });
@@ -802,14 +814,10 @@ $("#shoppingCheckoutForm").addEventListener("submit", async (event) => {
   setMessage($("#shoppingCheckoutMessage"));
   const amount = parseMoneyInput($("#shoppingTotal").value);
   if (!amount) return setMessage($("#shoppingCheckoutMessage"), "Informe o valor total da compra.");
-  const checkedItems = state.shoppingItems.filter((item) => item.checked);
   try {
-    const saved = await api("/api/financial-entries", { method: "POST", body: JSON.stringify({ type: "variable_expense", profile: "Casa", description: "Compra no supermercado", amount, date: $("#shoppingPurchaseDate").value, category: "Supermercado", status: "settled", notes: checkedItems.length ? `${checkedItems.length} ${checkedItems.length === 1 ? "item comprado" : "itens comprados"}` : "Compra finalizada pela lista de compras" }) });
-    state.financialEntries.push(saved);
-    if (checkedItems.length) {
-      await api("/api/shopping-items/checked", { method: "DELETE" });
-      state.shoppingItems = state.shoppingItems.filter((item) => !item.checked);
-    }
+    const result = await api("/api/shopping-items/checkout", { method: "POST", body: JSON.stringify({ amount, date: $("#shoppingPurchaseDate").value }) });
+    state.financialEntries.push(result.entry);
+    if (result.removed) state.shoppingItems = state.shoppingItems.filter((item) => !item.checked);
     $("#shoppingCheckoutForm").reset();
     $("#shoppingPurchaseDate").value = new Date().toLocaleDateString("en-CA");
     renderShopping(); renderFinancialEntries(); renderDre();

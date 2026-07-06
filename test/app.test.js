@@ -268,19 +268,30 @@ test("contador acessa DRE compartilhada somente para leitura", async (context) =
   assert.equal((await put(base, `/api/financial-entries/${entry.body.id}`, { ...entry.body, amount: 1 }, accountant.cookie)).status, 402);
 });
 
-test("lista de compras é privada e permite concluir itens", async (context) => {
+test("lista de compras é privada, limita o total grátis e lança no financeiro", async (context) => {
   const storage = new MemoryStorage();
   const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
   const server = app.listen(0, "127.0.0.1"); await once(server, "listening"); context.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
   const first = await post(base, "/api/register", { identifier: "compras1@example.com", password: "SenhaForte123" });
   const second = await post(base, "/api/register", { identifier: "compras2@example.com", password: "SenhaForte123" });
+  const admin = await post(base, "/api/register", { identifier: "admin@example.com", password: "SenhaForte123" });
   const item = await post(base, "/api/shopping-items", { name: "Carne bovina", category: "Carnes e peixes", quantity: 2, unit: "kg" }, first.cookie);
   assert.equal(item.status, 201);
   assert.equal((await get(base, "/api/data", second.cookie)).body.shoppingItems.length, 0);
   assert.equal((await patch(base, `/api/shopping-items/${item.body.id}`, { checked: true }, first.cookie)).body.checked, true);
-  assert.equal((await remove(base, "/api/shopping-items/checked", first.cookie)).body.removed, 1);
-  assert.equal((await get(base, "/api/data", first.cookie)).body.shoppingItems.length, 0);
+  const blocked = await post(base, "/api/shopping-items/checkout", { amount: 500.01, date: "2026-07-06" }, first.cookie);
+  assert.equal(blocked.status, 402);
+  assert.match(blocked.body.error, /R\$ 500/);
+  assert.equal((await get(base, "/api/data", first.cookie)).body.shoppingItems.length, 1);
+  const checkout = await post(base, "/api/shopping-items/checkout", { amount: 500, date: "2026-07-06" }, first.cookie);
+  assert.equal(checkout.status, 201);
+  assert.equal(checkout.body.entry.amount, 500);
+  assert.equal(checkout.body.removed, 1);
+  const data = (await get(base, "/api/data", first.cookie)).body;
+  assert.equal(data.shoppingItems.length, 0);
+  assert.equal(data.financialEntries[0].description, "Compra no supermercado");
+  assert.equal((await post(base, "/api/shopping-items/checkout", { amount: 900, date: "2026-07-06" }, admin.cookie)).status, 201);
 });
 test("isola categorias personalizadas por usuário", async (context) => {
   const storage = new MemoryStorage();

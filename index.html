@@ -357,6 +357,15 @@
       <form id="resetPasswordForm" class="login-form"><label>Nova senha<input id="resetPassword" type="password" minlength="8" autocomplete="new-password" required /></label><label>Confirmar nova senha<input id="resetPasswordConfirm" type="password" minlength="8" autocomplete="new-password" required /></label><button class="primary-button" type="submit">Salvar nova senha</button></form>
       <p id="resetPasswordMessage" class="form-message" aria-live="polite"></p>
     </dialog>
+    <dialog id="upgradeDialog" class="support-dialog upgrade-dialog" aria-labelledby="upgradeTitle">
+      <div class="support-dialog-head">
+        <div><p class="eyebrow">Plano Pro</p><h2 id="upgradeTitle">Você chegou ao limite do plano Grátis</h2></div>
+        <button id="closeUpgradeDialog" class="icon-button" type="button" aria-label="Fechar aviso" title="Fechar">×</button>
+      </div>
+      <p id="upgradeMessage">Este recurso está disponível no Plano Pro.</p>
+      <div class="upgrade-benefits"><span>Contas e cartões ilimitados</span><span>Casa e Empresa no mesmo controle</span><span>Mais liberdade para organizar seu financeiro</span></div>
+      <div class="upgrade-actions"><button id="upgradeToPro" class="primary-button" type="button">Conhecer o Plano Pro</button><button id="upgradeLater" class="ghost-button" type="button">Agora não</button></div>
+    </dialog>
     <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
       <div class="support-dialog-head">
         <div><p class="eyebrow">Atendimento</p><h2 id="supportTitle">Falar com o suporte</h2></div>

@@ -30,7 +30,9 @@ const feedbackSchema = z.object({ rating: z.coerce.number().int().min(1).max(10)
 const feedbackReplySchema = z.object({ response: z.string().trim().min(2).max(2000) });
 const accountantSchema = z.object({ email: z.string().trim().email().max(320) });
 const shoppingItemSchema = z.object({ name: z.string().trim().min(1).max(100), category: z.string().trim().min(2).max(40), quantity: z.coerce.number().positive().max(9999), unit: z.enum(["un", "kg", "g", "L", "ml", "pct", "cx"]) });
-const shoppingUpdateSchema = z.object({ checked: z.boolean() });const financialEntrySchema = z.object({
+const shoppingUpdateSchema = z.object({ checked: z.boolean() });
+const shoppingCheckoutSchema = z.object({ amount: z.coerce.number().positive().max(999999999.99), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+const financialEntrySchema = z.object({
   type: z.enum(["income", "variable_expense", "receivable"]),
   profile: z.enum(profiles),
   description: z.string().trim().min(2).max(160),
@@ -63,7 +65,7 @@ const checkoutSchema = z.object({ payerEmail: z.string().trim().email().max(320)
 const notificationSchema = z.object({ pushEnabled: z.boolean(), reminderDays: z.coerce.number().int().min(1).max(30) });
 const incomeSchema = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), profile: z.enum(profiles), amount: z.coerce.number().nonnegative().max(999999999.99) });
 const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048), keys: z.object({ p256dh: z.string().min(20).max(512), auth: z.string().min(8).max(256) }) });
-const freeLimits = { billsPerMonth: 10, cards: 1, monthlyIncome: 3000 };
+const freeLimits = { billsPerMonth: 10, cards: 1, monthlyIncome: 3000, shoppingPurchase: 500 };
 
 export async function createApp(options = {}) {
   const env = options.env || process.env;
@@ -251,6 +253,16 @@ export async function createApp(options = {}) {
 
   app.post("/api/shopping-items", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createShoppingItem(req.user.id, shoppingItemSchema.parse(req.body)))));
   app.patch("/api/shopping-items/:id", authenticate, asyncRoute(async (req, res) => { const item = await storage.updateShoppingItem(req.user.id, req.params.id, shoppingUpdateSchema.parse(req.body)); return item ? res.json(item) : res.status(404).json({ error: "Item não encontrado." }); }));
+  app.post("/api/shopping-items/checkout", authenticate, asyncRoute(async (req, res) => {
+    const input = shoppingCheckoutSchema.parse(req.body);
+    const access = await getAccess(req.user);
+    if (access.plan !== "pro" && input.amount > freeLimits.shoppingPurchase) return res.status(402).json({ error: "O plano Grátis permite finalizar compras de até R$ 500. Assine o Pro para lançar valores maiores." });
+    const data = await storage.listData(req.user.id);
+    const checkedCount = (data.shoppingItems || []).filter((item) => item.checked).length;
+    const entry = await storage.createFinancialEntry(req.user.id, { type: "variable_expense", profile: "Casa", description: "Compra no supermercado", amount: input.amount, date: input.date, category: "Supermercado", status: "settled", notes: checkedCount ? `${checkedCount} ${checkedCount === 1 ? "item comprado" : "itens comprados"}` : "Compra finalizada pela lista de compras" });
+    const removed = checkedCount ? await storage.clearCheckedShoppingItems(req.user.id) : 0;
+    return res.status(201).json({ entry, removed });
+  }));
   app.delete("/api/shopping-items/checked", authenticate, asyncRoute(async (req, res) => res.json({ removed: await storage.clearCheckedShoppingItems(req.user.id) })));
   app.delete("/api/shopping-items/:id", authenticate, asyncRoute(async (req, res) => (await storage.deleteShoppingItem(req.user.id, req.params.id)) ? res.status(204).end() : res.status(404).json({ error: "Item não encontrado." })));
   app.post("/api/financial-entries", authenticate, asyncRoute(async (req, res) => {
