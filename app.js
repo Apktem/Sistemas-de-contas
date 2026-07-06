@@ -30,6 +30,26 @@ const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], s
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
+const themeStorageKey = "ricoxp-theme";
+
+function applyTheme(theme, persist = true) {
+  const selected = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = selected;
+  if (persist) try { localStorage.setItem(themeStorageKey, selected); } catch {}
+  const dark = selected === "dark";
+  const button = document.querySelector("#themeToggle");
+  const icon = document.querySelector("#themeToggleIcon");
+  const label = document.querySelector("#themeToggleLabel");
+  if (button) {
+    button.setAttribute("aria-pressed", String(dark));
+    button.setAttribute("aria-label", dark ? "Ativar modo claro" : "Ativar modo escuro");
+    button.title = dark ? "Ativar modo claro" : "Ativar modo escuro";
+  }
+  if (icon) icon.textContent = dark ? "☀" : "☾";
+  if (label) label.textContent = dark ? "Modo claro" : "Modo escuro";
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.content = dark ? "#0b1417" : "#071f3f";
+}
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 const els = {
@@ -298,7 +318,7 @@ function renderChart() {
   const paidEnd = total ? (values[0].value / total) * 360 : 0;
   const pendingEnd = total ? paidEnd + (values[1].value / total) * 360 : 0;
   const donut = $("#statusDonut");
-  donut.style.background = total ? `conic-gradient(#209869 0deg ${paidEnd}deg, #d8911c ${paidEnd}deg ${pendingEnd}deg, #cf3f3f ${pendingEnd}deg 360deg)` : "#eef3f2";
+  donut.style.background = total ? `conic-gradient(var(--paid) 0deg ${paidEnd}deg, var(--due) ${paidEnd}deg ${pendingEnd}deg, var(--late) ${pendingEnd}deg 360deg)` : "var(--line)";
   donut.setAttribute("aria-label", `${money.format(values[0].value)} pago, ${money.format(values[1].value)} a vencer e ${money.format(values[2].value)} vencido`);
   $("#statusDonutPercent").textContent = `${paidPercent}%`;
   $("#paidPercent").textContent = `${paidPercent}% pago`;
@@ -1084,6 +1104,12 @@ $("#adminPasswordForm").addEventListener("submit", async (event) => {
     setMessage($("#adminClientMessage"), result.message, true);
   } catch (error) { setMessage($("#adminClientMessage"), error.message); }
 });
+
+
+$("#themeToggle").addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+applyTheme(document.documentElement.dataset.theme, false);
 
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
