@@ -1,0 +1,35 @@
+{
+  "packageId": "com.ricoxp.app",
+  "host": "ricoxp.com",
+  "name": "RicoXP Gestao Financeira",
+  "launcherName": "RicoXP",
+  "display": "standalone",
+  "themeColor": "#071f3f",
+  "themeColorDark": "#071f3f",
+  "navigationColor": "#071f3f",
+  "navigationColorDark": "#071f3f",
+  "backgroundColor": "#f5f7f8",
+  "startUrl": "/login?source=twa",
+  "scope": "/",
+  "iconUrl": "https://ricoxp.com/brand-icon-512",
+  "maskableIconUrl": "https://ricoxp.com/brand-icon-512",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "ricoxp"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://ricoxp.com/app-manifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  }
+}

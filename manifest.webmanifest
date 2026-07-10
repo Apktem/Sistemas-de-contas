@@ -5,6 +5,7 @@
   "description": "Controle financeiro pessoal e empresarial para contas, cartões, vencimentos e parcelamentos.",
   "lang": "pt-BR",
   "start_url": "/login?source=pwa",
+  "launch_handler": { "client_mode": "navigate-existing" },
   "scope": "/",
   "display": "standalone",
   "background_color": "#f5f7f8",

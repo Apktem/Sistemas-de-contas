@@ -444,6 +444,28 @@ export async function createApp(options = {}) {
       res.sendFile(path.join(root, "assets", file));
     });
   });
+  app.get("/.well-known/assetlinks.json", (_req, res) => {
+    const packageName = process.env.ANDROID_PACKAGE_NAME || "com.ricoxp.app";
+    const fingerprints = (process.env.ANDROID_SHA256_CERT_FINGERPRINTS || "")
+      .split(",")
+      .map((fingerprint) => fingerprint.trim())
+      .filter(Boolean);
+    if (!fingerprints.length) {
+      return res.status(404).json({ error: "Android asset links ainda nao configurado." });
+    }
+    res.type("application/json");
+    res.set("Cache-Control", "public, max-age=3600");
+    return res.json([
+      {
+        relation: ["delegate_permission/common.handle_all_urls"],
+        target: {
+          namespace: "android_app",
+          package_name: packageName,
+          sha256_cert_fingerprints: fingerprints,
+        },
+      },
+    ]);
+  });
   app.get("/app-manifest", (_req, res) => {
     res.type("application/manifest+json");
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -470,6 +492,7 @@ export async function createApp(options = {}) {
   }
   const pageRoot = hasBuild ? distRoot : root;
   app.get("/", (_req, res) => res.sendFile(path.join(pageRoot, "landing.html")));
+  app.get(["/privacidade", "/privacidade/"], (_req, res) => res.sendFile(path.join(pageRoot, "privacy.html")));
   app.get(["/login", "/login/"], (_req, res) => res.sendFile(path.join(pageRoot, "index.html")));
   app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(pageRoot, "index.html")) : next());
   app.use((error, _req, res, _next) => {

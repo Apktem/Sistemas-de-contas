@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         app: resolve("index.html"),
         landing: resolve("landing.html"),
+        privacy: resolve("privacy.html"),
       },
     },
   },
