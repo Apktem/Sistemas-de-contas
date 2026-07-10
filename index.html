@@ -343,6 +343,13 @@
                 <label>Status<input id="adminClientStatus" type="text" readonly /></label>
                 <button class="primary-button" type="submit">Salvar dados do cliente</button>
               </form>
+              <section class="password-admin-form admin-plan-form">
+                <h3>Plano do cliente</h3><p class="muted">Libere o Pro de teste para revisao, suporte ou demonstracao sem passar pelo pagamento.</p>
+                <div class="row-actions plan-admin-actions">
+                  <button id="adminSetPro" class="primary-button" type="button">Liberar Pro de teste</button>
+                  <button id="adminSetFree" class="ghost-button" type="button">Voltar para Gratis</button>
+                </div>
+              </section>
               <form id="adminPasswordForm" class="password-admin-form">
                 <h3>Redefinir senha</h3><p class="muted">Defina uma senha temporária com pelo menos 8 caracteres.</p>
                 <label>Nova senha<input id="adminClientPassword" type="password" minlength="8" autocomplete="new-password" required /></label>

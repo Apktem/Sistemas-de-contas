@@ -657,6 +657,8 @@ async function showAdminUser(id) {
   $("#adminClientIdentifier").value = user.identifierType === "email" ? "E-mail" : `CPF: ${user.identifierLabel}`;
   $("#adminClientPlan").value = user.plan === "pro" ? "Plano Pro" : "Plano Grátis";
   $("#adminClientStatus").value = user.active ? "Ativo" : "Inativo";
+  $("#adminSetPro").disabled = user.plan === "pro";
+  $("#adminSetFree").disabled = user.plan !== "pro";
   $("#adminClientPassword").value = "";
   $("#adminClientPasswordConfirm").value = "";
   setMessage($("#adminClientMessage"));
@@ -699,6 +701,21 @@ async function loadAdminFeedback() {
 function renderAdminFeedback() {
   $("#adminFeedbackList").innerHTML = state.adminFeedbacks.length ? state.adminFeedbacks.map((feedback) => `<article class="feedback-item admin-feedback-item"><div class="feedback-meta"><span class="rating-face" aria-hidden="true">${ratingFace(feedback.rating)}</span><strong>${feedback.rating}/10</strong><span>${escapeHtml(feedback.user?.name || feedback.user?.identifierLabel || "Cliente")}</span><small>${escapeHtml(feedback.user?.email || feedback.user?.identifierLabel || "")}</small><time>${new Date(feedback.createdAt).toLocaleString("pt-BR")}</time></div><p>${escapeHtml(feedback.message)}</p><form class="feedback-reply-form" data-feedback-reply="${feedback.id}"><label>Resposta<textarea rows="3" minlength="2" maxlength="2000" required>${escapeHtml(feedback.response || "")}</textarea></label><button class="${feedback.response ? "ghost-button" : "primary-button"}" type="submit">${feedback.response ? "Atualizar resposta" : "Responder cliente"}</button></form></article>`).join("") : '<p class="muted empty-state">Nenhum feedback recebido.</p>';
 }
+async function updateAdminUserPlan(plan) {
+  if (!state.selectedAdminUser) return;
+  const action = plan === "pro" ? "liberar o Plano Pro de teste" : "voltar para o Plano Gratis";
+  if (!confirm(`Deseja ${action} para este cliente?`)) return;
+  setMessage($("#adminClientMessage"));
+  try {
+    const result = await api(`/api/admin/users/${state.selectedAdminUser.id}/plan`, { method: "PATCH", body: JSON.stringify({ plan }) });
+    await loadAdmin();
+    await showAdminUser(state.selectedAdminUser.id);
+    setMessage($("#adminClientMessage"), result.message || "Plano atualizado.", true);
+  } catch (error) {
+    setMessage($("#adminClientMessage"), error.message);
+  }
+}
+
 function exportCsv() {
   const rows = [["Nome", "Perfil", "Categoria", "Valor", "Vencimento", "Status"]];
   getFilteredBills().forEach((bill) => rows.push([bill.name, bill.profile, bill.category, bill.amount, bill.dueDate, statusLabel(billSituation(bill))]));
@@ -1070,6 +1087,8 @@ $("#cancelSubscription").addEventListener("click", async () => {
 
 $("#refreshAdmin").addEventListener("click", loadAdmin);
 $("#closeAdminDetail").addEventListener("click", () => $("#adminUserDetail").classList.add("hidden"));
+$("#adminSetPro").addEventListener("click", () => updateAdminUserPlan("pro"));
+$("#adminSetFree").addEventListener("click", () => updateAdminUserPlan("free"));
 $("#adminUserTable").addEventListener("click", async (event) => {
   const viewButton = event.target.closest("[data-admin-manage]");
   const statusButton = event.target.closest("[data-admin-status]");

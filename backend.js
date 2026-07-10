@@ -26,6 +26,7 @@ const forgotPasswordSchema = z.object({ email: z.string().trim().email().max(320
 const resetPasswordSchema = z.object({ token: z.string().min(40).max(200), password: z.string().min(8).max(72) });
 const adminProfileSchema = z.object({ name: z.string().trim().min(2).max(100), email: z.string().trim().email().max(320).optional(), avatarData: avatarSchema });
 const adminPasswordSchema = z.object({ password: z.string().min(8).max(72) });
+const adminPlanSchema = z.object({ plan: z.enum(["free", "pro"]) });
 const feedbackSchema = z.object({ rating: z.coerce.number().int().min(1).max(10), message: z.string().trim().min(3).max(2000) });
 const feedbackReplySchema = z.object({ response: z.string().trim().min(2).max(2000) });
 const accountantSchema = z.object({ email: z.string().trim().email().max(320) });
@@ -421,6 +422,21 @@ export async function createApp(options = {}) {
     const { password } = adminPasswordSchema.parse(req.body);
     const updated = await storage.updateUserPassword(req.params.id, await bcrypt.hash(password, 12));
     return updated ? res.json({ message: "Senha do cliente atualizada." }) : res.status(404).json({ error: "Usuário não encontrado." });
+  }));
+  app.patch("/api/admin/users/:id/plan", authenticate, adminOnly, asyncRoute(async (req, res) => {
+    const targetUser = await storage.adminUser(req.params.id);
+    if (!targetUser) return res.status(404).json({ error: "Usuario nao encontrado." });
+    const { plan } = adminPlanSchema.parse(req.body);
+    await storage.upsertSubscription({
+      userId: req.params.id,
+      providerId: `manual:${req.params.id}`,
+      payerEmail: targetUser.email || targetUser.identifierLabel || null,
+      status: plan === "pro" ? "authorized" : "cancelled",
+      nextPaymentDate: null,
+      updatedAt: new Date().toISOString(),
+    });
+    const user = await storage.adminUser(req.params.id);
+    return res.json({ user, message: plan === "pro" ? "Plano Pro liberado para este cliente." : "Cliente voltou ao Plano Gratis." });
   }));
   app.patch("/api/admin/users/:id/status", authenticate, adminOnly, asyncRoute(async (req, res) => {
     if (req.params.id === req.user.id) return res.status(400).json({ error: "Você não pode desativar sua própria conta." });
