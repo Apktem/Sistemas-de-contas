@@ -508,7 +508,7 @@ export async function createApp(options = {}) {
   }
   const pageRoot = hasBuild ? distRoot : root;
   app.get("/", (_req, res) => res.sendFile(path.join(pageRoot, "landing.html")));
-  app.get(["/privacidade", "/privacidade/"], (_req, res) => res.sendFile(path.join(pageRoot, "privacy.html")));
+  app.get(["/privacy", "/privacy/", "/privacidade", "/privacidade/"], (_req, res) => res.sendFile(path.join(pageRoot, "privacy.html")));
   app.get(["/login", "/login/"], (_req, res) => res.sendFile(path.join(pageRoot, "index.html")));
   app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(pageRoot, "index.html")) : next());
   app.use((error, _req, res, _next) => {
