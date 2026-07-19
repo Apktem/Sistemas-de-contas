@@ -102,6 +102,14 @@ function showAuth() {
   els.appScreen.classList.add("hidden");
   setTimeout(showInstallPrompt, 900);
 }
+function scrollActiveMonthIntoView() {
+  const tabs = $("#monthTabs");
+  const active = tabs?.querySelector(".month-tab.active");
+  if (!tabs || !active || !window.matchMedia("(max-width: 900px)").matches) return;
+  requestAnimationFrame(() => {
+    tabs.scrollLeft = Math.max(0, active.offsetLeft - tabs.offsetLeft - 2);
+  });
+}
 function syncDashboardMobileOrder() {
   const welcome = $(".dashboard-welcome");
   const dashboard = $("#dashboardView");
@@ -296,6 +304,7 @@ function renderDashboardNavigation() {
     return `<button class="month-tab ${active ? "active" : ""}" type="button" role="tab" aria-selected="${active}" data-month-value="${value}">${name}</button>`;
   }).join("");
   syncDashboardMobileOrder();
+  scrollActiveMonthIntoView();
 }
 
 function render() {
