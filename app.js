@@ -954,6 +954,44 @@ $("#shoppingCheckoutForm").addEventListener("submit", async (event) => {
 $("#accountantForm").addEventListener("submit", async (event) => { event.preventDefault(); setMessage($("#accountantMessage")); try { state.accountants.unshift(await api("/api/accountants", { method: "POST", body: JSON.stringify({ email: $("#accountantEmail").value }) })); $("#accountantForm").reset(); renderAccountantAccess(); setMessage($("#accountantMessage"), "Acesso do contador liberado.", true); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
 $("#accountantList").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-delete]"); if (!button) return; try { await api(`/api/accountants/${button.dataset.accountantDelete}`, { method: "DELETE" }); state.accountants = state.accountants.filter((item) => item.id !== button.dataset.accountantDelete); renderAccountantAccess(); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
 $("#accountantCompanies").addEventListener("click", async (event) => { const button = event.target.closest("[data-accountant-company]"); if (!button) return; try { const report = await api(`/api/accountant/companies/${button.dataset.accountantCompany}`); state.accountantReport = report; const data = dreData(report.bills, report.financialEntries, "Empresa"); $("#accountantReportTitle").textContent = `DRE · ${report.company.owner?.name || "Empresa"}`; $("#accountantReportPeriod").textContent = new Date(`${els.monthFilter.value}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); $("#accountantReportLines").innerHTML = dreLinesHtml(data); $("#accountantReport").classList.remove("hidden"); } catch (error) { setMessage($("#accountantMessage"), error.message); } });
+$("#appointmentForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage($("#agendaMessage"));
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  const appointment = { date: form.elements.date.value, time: form.elements.time.value, description: form.elements.description.value.trim(), notes: form.elements.notes.value.trim() };
+  try {
+    const saved = await api(id ? `/api/appointments/${id}` : "/api/appointments", { method: id ? "PUT" : "POST", body: JSON.stringify(appointment) });
+    if (id) state.appointments[state.appointments.findIndex((item) => item.id === id)] = saved; else state.appointments.push(saved);
+    resetAppointmentForm();
+    renderAgenda();
+    setMessage($("#agendaMessage"), "Compromisso salvo na agenda.", true);
+  } catch (error) { setMessage($("#agendaMessage"), error.message); }
+});
+$("#cancelAppointmentEdit").addEventListener("click", resetAppointmentForm);
+$("#appointmentList").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-appointment-action]");
+  if (!button) return;
+  const appointment = state.appointments.find((item) => item.id === button.dataset.appointmentId);
+  if (!appointment) return;
+  if (button.dataset.appointmentAction === "edit") {
+    const form = $("#appointmentForm");
+    form.elements.id.value = appointment.id;
+    form.elements.date.value = appointment.date;
+    form.elements.time.value = appointment.time;
+    form.elements.description.value = appointment.description;
+    form.elements.notes.value = appointment.notes || "";
+    $("#cancelAppointmentEdit").classList.remove("hidden");
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  try {
+    await api(`/api/appointments/${appointment.id}`, { method: "DELETE" });
+    state.appointments = state.appointments.filter((item) => item.id !== appointment.id);
+    renderAgenda();
+    setMessage($("#agendaMessage"), "Compromisso removido.", true);
+  } catch (error) { setMessage($("#agendaMessage"), error.message); }
+});
 $$('.financial-entry-form').forEach((form) => {
   resetEntryForm(form);
   form.addEventListener("submit", async (event) => {
