@@ -82,6 +82,24 @@ test("cadastra nome e foto no perfil do cliente", async (context) => {
   assert.equal(account.body.user.avatarData, avatarData);
 });
 
+
+test("mantem sessao ao atualizar a pagina", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = await post(base, "/api/register", { name: "ADM 2026", identifier: "admin@example.com", password: "SenhaForte123" });
+  const firstSession = await get(base, "/api/session", login.cookie);
+  assert.equal(firstSession.status, 200);
+  assert.equal(firstSession.body.user.name, "ADM 2026");
+  assert.equal("passwordHash" in firstSession.body.user, false);
+  assert.match(firstSession.cookie, /^finance_session=/);
+  const refreshedSession = await get(base, "/api/session", firstSession.cookie);
+  assert.equal(refreshedSession.status, 200);
+  assert.equal(refreshedSession.body.user.identifierLabel, "admin@example.com");
+});
 test("recupera a senha por token temporario enviado por email", async (context) => {
   const storage = new MemoryStorage();
   let resetToken;
@@ -397,7 +415,7 @@ async function post(base, path, body, cookie = "") {
 
 async function get(base, path, cookie) {
   const response = await fetch(`${base}${path}`, { headers: { Cookie: cookie } });
-  return { status: response.status, body: await response.json() };
+  return { status: response.status, body: await response.json(), cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie };
 }
 
 async function put(base, path, body, cookie = "") {

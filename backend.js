@@ -86,10 +86,11 @@ export async function createApp(options = {}) {
   app.use(express.json({ limit: "512kb" }));
   app.use(cookieParser());
 
+  const sessionMaxAge = 30 * 24 * 60 * 60 * 1000;
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
   const setSession = (res, user) => {
-    const token = jwt.sign({ sub: user.id, role: user.role }, sessionSecret, { expiresIn: "7d", issuer: "gestao-financeira" });
-    res.cookie("finance_session", token, { httpOnly: true, secure: production, sameSite: "lax", priority: "high", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
+    const token = jwt.sign({ sub: user.id, role: user.role }, sessionSecret, { expiresIn: "30d", issuer: "gestao-financeira" });
+    res.cookie("finance_session", token, { httpOnly: true, secure: production, sameSite: "lax", priority: "high", maxAge: sessionMaxAge, path: "/" });
   };
   const ensureAdminRole = async (user) => {
     const isConfiguredAdmin = user?.identifierType === "email" && user.identifierLabel?.toLowerCase() === adminEmail;
@@ -211,7 +212,10 @@ export async function createApp(options = {}) {
     res.clearCookie("finance_session", { httpOnly: true, secure: production, sameSite: "lax", path: "/" });
     res.status(204).end();
   });
-  app.get("/api/session", authenticate, (req, res) => res.json({ user: req.user }));
+  app.get("/api/session", authenticate, (req, res) => {
+    setSession(res, req.user);
+    return res.json({ user: sanitizeUser(req.user) });
+  });
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
     const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
     if (access.plan === "pro") return res.json(data);
