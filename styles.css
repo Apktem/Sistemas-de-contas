@@ -530,3 +530,11 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
 @media (min-width: 641px) and (max-width: 900px) {
   .month-tabs { grid-auto-columns: minmax(76px, 1fr); }
 }
+
+/* Mobile dashboard ordering */
+@media (max-width: 640px) {
+  .topbar .dashboard-welcome { grid-column: 1 / -1; order: 3; margin: 8px 0 2px; }
+  .topbar .topbar-actions { grid-column: 1 / -1; order: 4; }
+  .topbar .dashboard-greeting { padding-top: 0; }
+  .topbar .month-tabs { margin-top: 12px; }
+}

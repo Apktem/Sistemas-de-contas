@@ -72,7 +72,7 @@ function dashboardMonthSummary({ bills = [], entries = [], cards = [], month, pr
   return { bills: monthBills, pendingReceivables, received, variableExpenses, cards: monthCards, receivedTotal: sum(received), variableTotal: sum(variableExpenses), expenseTotal: sum(monthBills) + sum(variableExpenses) };
 }
 async function api(url, options = {}) {
-  const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options.headers } });
+  const response = await fetch(url, { ...options, credentials: "include", headers: { "Content-Type": "application/json", ...options.headers } });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -102,7 +102,20 @@ function showAuth() {
   els.appScreen.classList.add("hidden");
   setTimeout(showInstallPrompt, 900);
 }
-
+function syncDashboardMobileOrder() {
+  const welcome = $(".dashboard-welcome");
+  const dashboard = $("#dashboardView");
+  const shortcuts = $(".dashboard-shortcuts");
+  const topbar = $(".topbar");
+  const actions = $(".topbar-actions");
+  if (!welcome || !dashboard || !topbar || !actions) return;
+  const mobile = window.matchMedia("(max-width: 640px)").matches;
+  if (mobile) {
+    if (welcome.parentElement !== topbar) topbar.insertBefore(welcome, actions);
+  } else if (welcome.parentElement !== dashboard) {
+    dashboard.insertBefore(welcome, shortcuts || dashboard.firstElementChild);
+  }
+}
 async function enterApp(user) {
   state.user = user;
   $("#userBadge").textContent = `${user.name || user.identifierLabel}${user.role === "admin" ? " · Administrador" : ""}`;
@@ -218,7 +231,7 @@ function renderSubscription() {
   const companyButton = $('[data-workspace="Empresa"]');
   companyButton.classList.toggle("locked", !canAccessCompany);
   if (!canAccessCompany && els.profileFilter.value === "Empresa") setWorkspace("Casa", false);
-setCardDateDefaults();
+  syncDashboardMobileOrder();
   renderIncome();
   if (isPro) {
     let savedWorkspace = "Casa";
@@ -281,6 +294,7 @@ function renderDashboardNavigation() {
     const active = String(index + 1).padStart(2, "0") === selectedMonth;
     return `<button class="month-tab ${active ? "active" : ""}" type="button" role="tab" aria-selected="${active}" data-month-value="${value}">${name}</button>`;
   }).join("");
+  syncDashboardMobileOrder();
 }
 
 function render() {
@@ -1270,8 +1284,10 @@ applyTheme(document.documentElement.dataset.theme, false);
 els.monthFilter.value = new Date().toISOString().slice(0, 7);
 $("#todayLabel").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 setWorkspace("Casa", false);
+syncDashboardMobileOrder();
 setCardDateDefaults();
 if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("register");
 if (new URLSearchParams(location.search).get("reset_token")) $("#resetPasswordDialog").showModal();
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
+window.addEventListener("resize", syncDashboardMobileOrder);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});

@@ -89,7 +89,7 @@ export async function createApp(options = {}) {
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
   const setSession = (res, user) => {
     const token = jwt.sign({ sub: user.id, role: user.role }, sessionSecret, { expiresIn: "7d", issuer: "gestao-financeira" });
-    res.cookie("finance_session", token, { httpOnly: true, secure: production, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
+    res.cookie("finance_session", token, { httpOnly: true, secure: production, sameSite: "lax", priority: "high", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
   };
   const ensureAdminRole = async (user) => {
     const isConfiguredAdmin = user?.identifierType === "email" && user.identifierLabel?.toLowerCase() === adminEmail;
