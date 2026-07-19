@@ -107,7 +107,8 @@ function scrollActiveMonthIntoView() {
   const active = tabs?.querySelector(".month-tab.active");
   if (!tabs || !active || !window.matchMedia("(max-width: 900px)").matches) return;
   requestAnimationFrame(() => {
-    tabs.scrollLeft = Math.max(0, active.offsetLeft - tabs.offsetLeft - 2);
+    const centeredLeft = active.offsetLeft - (tabs.clientWidth - active.clientWidth) / 2;
+    tabs.scrollTo({ left: Math.max(0, centeredLeft), behavior: "auto" });
   });
 }
 function syncDashboardMobileOrder() {

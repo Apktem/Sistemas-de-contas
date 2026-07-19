@@ -542,16 +542,18 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
 /* Mobile/tablet final polish */
 #agendaCount { white-space: nowrap; text-align: right; }
 @media (max-width: 900px) {
-  .topbar { position: relative; padding-right: 58px; }
+  .topbar { position: relative; }
   .topbar .topbar-actions { padding-right: 0; }
   .topbar .theme-toggle { position: absolute; top: 0; right: 0; z-index: 2; width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 0; }
   .theme-toggle #themeToggleLabel { display: none; }
   .month-tabs { scroll-padding-left: 2px; }
-  .month-tab.active { order: -1; }
   .appointment-form .primary-button { grid-column: 1 / -1; justify-self: center; min-width: min(290px, 100%); }
 }
 @media (max-width: 640px) {
-  .topbar .dashboard-welcome { padding-right: 0; }
+  .topbar .dashboard-welcome { padding-right: 0; width: 100%; }
+  .topbar .topbar-actions { width: 100%; }
+  .topbar .filters { width: 100%; }
+  .topbar .workspace-context { width: 100%; }
   .topbar .month-tabs { margin-top: 12px; }
   .appointment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .appointment-form label { min-width: 0; }
