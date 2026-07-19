@@ -271,7 +271,7 @@ function billSituation(bill) {
 function renderDashboardNavigation() {
   const firstName = String(state.user?.name || state.user?.identifierLabel || "").trim().split(/\s+/)[0] || "cliente";
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "bom dia" : hour < 18 ? "boa tarde" : "boa noite";
+  const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   $("#dashboardGreeting").textContent = `${greeting}, ${firstName}!`;
   const [year, selectedMonth] = (els.monthFilter.value || new Date().toISOString().slice(0, 7)).split("-");
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -416,18 +416,22 @@ function renderFinanceCharts() {
   ].map((line) => ({ ...line, points: months.map((month) => ({ month, value: line.value(month) })) }));
   const rawMaxWave = Math.max(...lines.flatMap((line) => line.points.map((point) => point.value)), 0);
   const maxWave = Math.max(rawMaxWave, 1);
-  const left = 42, right = 696, top = 18, bottom = 176;
-  const x = (index) => left + (index * (right - left) / (months.length - 1));
-  const y = (value) => rawMaxWave ? bottom - ((value / maxWave) * (bottom - top)) : 96;
-  const paths = lines.map((line) => {
-    const coordinates = line.points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ");
-    const dots = line.points.map((point, index) => `<circle cx="${x(index)}" cy="${y(point.value)}" r="4" fill="${line.color}"><title>${line.label}: ${money.format(point.value)}</title></circle>`).join("");
-    return `<polyline points="${coordinates}" stroke="${line.color}" />${dots}`;
+  const left = 48, right = 704, top = 24, bottom = 184;
+  const x = (index) => left + (index * (right - left) / Math.max(months.length - 1, 1));
+  const y = (value, lineIndex) => {
+    if (!rawMaxWave) return 94 + (lineIndex * 22);
+    return bottom - ((value / maxWave) * (bottom - top));
+  };
+  const paths = lines.map((line, lineIndex) => {
+    const points = line.points.map((point, index) => ({ x: x(index), y: y(point.value, lineIndex), value: point.value }));
+    const path = points.map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`).join(" ");
+    const dots = points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="4.5" fill="${line.color}"><title>${line.label}: ${money.format(point.value)}</title></circle>`).join("");
+    return `<path class="wave-line" d="${path}" stroke="${line.color}" fill="none" />${dots}`;
   }).join("");
-  const labels = months.map((month, index) => `<text x="${x(index)}" y="207" text-anchor="middle">${new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</text>`).join("");
+  const labels = months.map((month, index) => `<text x="${x(index)}" y="218" text-anchor="middle">${new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</text>`).join("");
   const legend = lines.map((line) => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("");
   const wave = $("#waveChart");
-  if (wave) wave.innerHTML = `<svg viewBox="0 0 740 220" preserveAspectRatio="none" aria-hidden="true"><g class="forecast-grid"><line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" /><line x1="${left}" y1="96" x2="${right}" y2="96" /><line x1="${left}" y1="${top}" x2="${right}" y2="${top}" /></g>${paths}${labels}</svg><div class="wave-legend">${legend}</div>`;
+  if (wave) wave.innerHTML = `<svg viewBox="0 0 740 240" role="img" aria-label="Gráfico em onda dos últimos 6 meses"><g class="forecast-grid"><line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" /><line x1="${left}" y1="104" x2="${right}" y2="104" /><line x1="${left}" y1="${top}" x2="${right}" y2="${top}" /></g>${paths}${labels}</svg><div class="wave-legend">${legend}</div>`;
 }
 
 function renderAgenda() {
