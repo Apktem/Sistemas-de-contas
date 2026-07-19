@@ -506,20 +506,28 @@ export async function createApp(options = {}) {
     res.set("Cache-Control", "public, max-age=3600");
     res.sendFile(path.join(root, "sitemap.xml"));
   });
+  const noStoreAppShell = (res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.set("Surrogate-Control", "no-store");
+  };
   const distRoot = path.join(root, "dist");
   const hasBuild = existsSync(path.join(distRoot, "index.html"));
   if (hasBuild) {
-    app.use(express.static(distRoot, { index: false, maxAge: production ? "1h" : 0 }));
+    app.use(express.static(distRoot, { index: false, maxAge: production ? "1h" : 0, setHeaders: (res, filePath) => {
+      if (/index\.html$|landing\.html$|privacy\.html$|service-worker\.js$/i.test(filePath)) noStoreAppShell(res);
+    } }));
   } else {
     ["app.js", "styles.css", "landing.css", "landing.js", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
-      app.get(`/${file}`, (_req, res) => res.sendFile(path.join(root, file)));
+      app.get(`/${file}`, (_req, res) => { if (["app.js", "styles.css", "service-worker.js"].includes(file)) noStoreAppShell(res); res.sendFile(path.join(root, file)); });
     });
   }
   const pageRoot = hasBuild ? distRoot : root;
-  app.get("/", (_req, res) => res.sendFile(path.join(pageRoot, "landing.html")));
-  app.get(["/privacy", "/privacy/", "/privacidade", "/privacidade/"], (_req, res) => res.sendFile(path.join(pageRoot, "privacy.html")));
-  app.get(["/login", "/login/"], (_req, res) => res.sendFile(path.join(pageRoot, "index.html")));
-  app.use((req, res, next) => req.method === "GET" && req.accepts("html") ? res.sendFile(path.join(pageRoot, "index.html")) : next());
+  app.get("/", (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "landing.html")); });
+  app.get(["/privacy", "/privacy/", "/privacidade", "/privacidade/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "privacy.html")); });
+  app.get(["/login", "/login/"], (_req, res) => { noStoreAppShell(res); res.set("Clear-Site-Data", "\"cache\""); res.sendFile(path.join(pageRoot, "index.html")); });
+  app.use((req, res, next) => { if (req.method === "GET" && req.accepts("html")) { noStoreAppShell(res); return res.sendFile(path.join(pageRoot, "index.html")); } return next(); });
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: "Revise os dados informados." });
     if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ error: "Conta já cadastrada." });
