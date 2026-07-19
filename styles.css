@@ -123,6 +123,21 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(17, 94
 .metric.due { border-left-color: var(--due); }
 .metric.late { border-left-color: var(--late); }
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.dashboard-shortcuts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.dashboard-shortcut { position: relative; min-width: 0; padding: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--ink); text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.dashboard-shortcut::after { content: ">"; position: absolute; top: 14px; right: 16px; color: var(--muted); font-size: 1.1rem; transition: transform .18s ease; }
+.dashboard-shortcut:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: 0 14px 30px rgba(7, 31, 63, .12); }
+.dashboard-shortcut:hover::after { transform: translateX(3px); }
+.dashboard-shortcut:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.dashboard-shortcut span, .dashboard-shortcut small { display: block; }
+.dashboard-shortcut span { padding-right: 22px; color: var(--muted); font-size: .78rem; font-weight: 700; }
+.dashboard-shortcut strong { display: block; margin: 10px 0 6px; font-size: 1.12rem; }
+.dashboard-shortcut small { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.dashboard-shortcut.bills { border-top: 3px solid var(--due); }
+.dashboard-shortcut.receivables { border-top: 3px solid #18aee8; }
+.dashboard-shortcut.income { border-top: 3px solid var(--paid); }
+.dashboard-shortcut.variable { border-top: 3px solid #7968c8; }
+.dashboard-shortcut.cards { border-top: 3px solid var(--primary); }
 .panel { min-width: 0; padding: 18px; }
 .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-title h2 { margin: 0; font-size: 1.05rem; }
@@ -442,4 +457,14 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
   .topbar-actions .filters { grid-column: 1 / -1; grid-row: 2; }
   .theme-toggle { grid-column: 2; grid-row: 1; min-width: 42px; padding: 0 10px; }
   .theme-toggle #themeToggleLabel { display: none; }
+}
+
+@media (max-width: 800px) {
+  .dashboard-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-shortcut.cards { grid-column: 1 / -1; }
+}
+
+@media (max-width: 460px) {
+  .dashboard-shortcuts { grid-template-columns: 1fr; }
+  .dashboard-shortcut.cards { grid-column: auto; }
 }

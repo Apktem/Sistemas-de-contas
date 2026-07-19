@@ -146,6 +146,13 @@
         <p id="appMessage" class="form-message" aria-live="polite"></p>
 
         <section id="dashboardView" class="view active-view">
+          <section class="dashboard-shortcuts" aria-label="Atalhos financeiros">
+            <button class="dashboard-shortcut bills" data-dashboard-view="bills" type="button"><span>Contas a pagar</span><strong id="dashboardBillsTotal">R$ 0,00</strong><small id="dashboardBillsDetail">0 contas</small></button>
+            <button class="dashboard-shortcut receivables" data-dashboard-view="receivables" type="button"><span>Contas a receber</span><strong id="dashboardReceivablesTotal">R$ 0,00</strong><small id="dashboardReceivablesDetail">0 pendentes</small></button>
+            <button class="dashboard-shortcut income" data-dashboard-view="incomeEntries" type="button"><span>Recebimentos</span><strong id="dashboardReceivedTotal">R$ 0,00</strong><small id="dashboardReceivedDetail">0 recebidos</small></button>
+            <button class="dashboard-shortcut variable" data-dashboard-view="variableExpenses" type="button"><span>Gastos vari&aacute;veis</span><strong id="dashboardVariableTotal">R$ 0,00</strong><small id="dashboardVariableDetail">0 lan&ccedil;amentos</small></button>
+            <button class="dashboard-shortcut cards" data-dashboard-view="cards" type="button"><span>Cart&otilde;es</span><strong id="dashboardCardsUsed">R$ 0,00</strong><small id="dashboardCardsDetail">R$ 0,00 de limite</small></button>
+          </section>
           <section class="dashboard-welcome"><div><p id="dashboardGreeting" class="dashboard-greeting">Olá!</p><span id="monthTabsYear" class="dashboard-year"></span></div><div id="monthTabs" class="month-tabs" role="tablist" aria-label="Escolha o mês"></div></section>
           <div class="summary-grid">
             <article class="metric"><span>Total do mês</span><strong id="metricTotal">R$ 0,00</strong><small id="metricTotalCount">0 contas</small></article>
