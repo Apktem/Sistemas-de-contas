@@ -139,7 +139,8 @@ class SupabaseStorage {
     const categories = isMissingFeatureTable(categoryResult.error) ? [] : (check(categoryResult.error), categoryResult.data.map(mapCategory));
     const financialEntries = isMissingFeatureTable(entryResult.error) ? [] : (check(entryResult.error), entryResult.data.map(mapFinancialEntry));
     const shoppingItems = isMissingFeatureTable(shoppingResult.error) ? [] : (check(shoppingResult.error), shoppingResult.data.map(mapShoppingItem));
-    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes, categories, financialEntries, shoppingItems };
+    const appointments = isMissingFeatureTable(appointmentResult.error) ? [] : (check(appointmentResult.error), appointmentResult.data.map(mapAppointment));
+    return { bills: bills.map(mapBill), cards: cards.map(mapCard), incomes, categories, financialEntries, shoppingItems, appointments };
   }
 
   async createAppointment(userId, input) {
