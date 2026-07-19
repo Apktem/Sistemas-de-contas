@@ -986,7 +986,8 @@ $("#appointmentForm").addEventListener("submit", async (event) => {
   const appointment = { date: form.elements.date.value, time: form.elements.time.value, description: form.elements.description.value.trim(), notes: form.elements.notes.value.trim(), profile: els.profileFilter.value };
   try {
     const saved = await api(id ? `/api/appointments/${id}` : "/api/appointments", { method: id ? "PUT" : "POST", body: JSON.stringify(appointment) });
-    if (id) state.appointments[state.appointments.findIndex((item) => item.id === id)] = saved; else state.appointments.push(saved);
+    const normalizedSaved = { ...saved, profile: saved.profile || appointment.profile };
+    if (id) state.appointments[state.appointments.findIndex((item) => item.id === id)] = normalizedSaved; else state.appointments.push(normalizedSaved);
     resetAppointmentForm();
     renderAgenda();
     setMessage($("#agendaMessage"), "Compromisso salvo na agenda.", true);
@@ -1291,4 +1292,4 @@ if (new URLSearchParams(location.search).get("cadastro") === "1") setAuthView("r
 if (new URLSearchParams(location.search).get("reset_token")) $("#resetPasswordDialog").showModal();
 api("/api/session").then((result) => enterApp(result.user)).catch(showAuth);
 window.addEventListener("resize", syncDashboardMobileOrder);
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").then((registration) => registration.update()).catch(() => {});
