@@ -563,3 +563,15 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
   .form-panel .panel-title p { max-width: 22ch; }
   #agendaCount { font-size: .95rem; line-height: 1.15; }
 }
+
+/* Dark agenda contrast and mobile readability */
+html[data-theme="dark"] .primary-button { background: #1fb8a9; color: #061417; border-color: #53d6cb; }
+html[data-theme="dark"] .primary-button:hover { background: #49cabf; color: #061417; }
+html[data-theme="dark"] .appointment-row { background: #102126; border-color: #31505a; color: var(--ink); }
+html[data-theme="dark"] .appointment-row strong,
+html[data-theme="dark"] .appointment-row small,
+html[data-theme="dark"] .appointment-date span { color: var(--ink); }
+html[data-theme="dark"] .appointment-date { color: #49cabf; }
+html[data-theme="dark"] .appointment-row .small-button { background: #142126; color: var(--ink); }
+html[data-theme="dark"] .appointment-row .action-edit { border-color: #d8911c; }
+html[data-theme="dark"] .appointment-row .action-delete { border-color: #cf6b6b; }

@@ -316,6 +316,7 @@ function render() {
   renderIncome();
   renderCategoryChart();
   renderChartsView();
+  renderFinanceCharts();
   renderLists();
   renderTable();
   renderFinancialEntries();

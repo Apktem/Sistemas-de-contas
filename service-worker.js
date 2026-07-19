@@ -1,4 +1,4 @@
-const CACHE_NAME = "gestao-financeira-cache-v29";
+const CACHE_NAME = "gestao-financeira-cache-v30";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
@@ -6,7 +6,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.pathname.startsWith("/api/") || url.origin !== self.location.origin) return;
-  if (event.request.mode === "navigate" || /\.(?:js|css)$/i.test(url.pathname) || url.pathname === "/service-worker.js") {
+  if (event.request.mode === "navigate" || url.pathname === "/service-worker.js") {
     event.respondWith(fetch(event.request, { cache: "no-store" }).catch(() => caches.match(event.request)));
     return;
   }

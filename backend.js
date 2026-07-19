@@ -520,13 +520,13 @@ export async function createApp(options = {}) {
     } }));
   } else {
     ["app.js", "styles.css", "landing.css", "landing.js", "manifest.webmanifest", "service-worker.js", "icon.svg"].forEach((file) => {
-      app.get(`/${file}`, (_req, res) => { if (["app.js", "styles.css", "service-worker.js"].includes(file)) noStoreAppShell(res); res.sendFile(path.join(root, file)); });
+      app.get(`/${file}`, (_req, res) => { if (file === "service-worker.js") noStoreAppShell(res); else if (["app.js", "styles.css"].includes(file)) res.set("Cache-Control", "public, max-age=86400"); res.sendFile(path.join(root, file)); });
     });
   }
   const pageRoot = hasBuild ? distRoot : root;
   app.get("/", (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "landing.html")); });
   app.get(["/privacy", "/privacy/", "/privacidade", "/privacidade/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "privacy.html")); });
-  app.get(["/login", "/login/"], (_req, res) => { noStoreAppShell(res); res.set("Clear-Site-Data", "\"cache\""); res.sendFile(path.join(pageRoot, "index.html")); });
+  app.get(["/login", "/login/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "index.html")); });
   app.use((req, res, next) => { if (req.method === "GET" && req.accepts("html")) { noStoreAppShell(res); return res.sendFile(path.join(pageRoot, "index.html")); } return next(); });
   app.use((error, _req, res, _next) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: "Revise os dados informados." });
