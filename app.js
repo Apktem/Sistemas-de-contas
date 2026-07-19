@@ -272,10 +272,10 @@ function renderDashboardNavigation() {
   const firstName = String(state.user?.name || state.user?.identifierLabel || "").trim().split(/\s+/)[0] || "cliente";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "bom dia" : hour < 18 ? "boa tarde" : "boa noite";
-  $("#dashboardGreeting").textContent = `Olá, ${greeting}, ${firstName}!`;
+  $("#dashboardGreeting").textContent = `${greeting}, ${firstName}!`;
   const [year, selectedMonth] = (els.monthFilter.value || new Date().toISOString().slice(0, 7)).split("-");
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-  $("#monthTabsYear").textContent = year;
+  $("#monthTabsYear").textContent = "";
   $("#monthTabs").innerHTML = monthNames.map((name, index) => {
     const value = `${year}-${String(index + 1).padStart(2, "0")}`;
     const active = String(index + 1).padStart(2, "0") === selectedMonth;
@@ -414,11 +414,16 @@ function renderFinanceCharts() {
     { label: "Despesas", color: "#d8911c", value(month) { return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month, profile }).expenseTotal; } },
     { label: "Cartoes", color: "#115e59", value(month) { return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month, profile }).cards.reduce((total, card) => total + Number(card.used || 0), 0); } },
   ].map((line) => ({ ...line, points: months.map((month) => ({ month, value: line.value(month) })) }));
-  const maxWave = Math.max(...lines.flatMap((line) => line.points.map((point) => point.value)), 1);
+  const rawMaxWave = Math.max(...lines.flatMap((line) => line.points.map((point) => point.value)), 0);
+  const maxWave = Math.max(rawMaxWave, 1);
   const left = 42, right = 696, top = 18, bottom = 176;
   const x = (index) => left + (index * (right - left) / (months.length - 1));
-  const y = (value) => bottom - ((value / maxWave) * (bottom - top));
-  const paths = lines.map((line) => `<polyline points="${line.points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ")}" style="stroke:${line.color}" />`).join("");
+  const y = (value) => rawMaxWave ? bottom - ((value / maxWave) * (bottom - top)) : 96;
+  const paths = lines.map((line) => {
+    const coordinates = line.points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ");
+    const dots = line.points.map((point, index) => `<circle cx="${x(index)}" cy="${y(point.value)}" r="4" fill="${line.color}"><title>${line.label}: ${money.format(point.value)}</title></circle>`).join("");
+    return `<polyline points="${coordinates}" stroke="${line.color}" />${dots}`;
+  }).join("");
   const labels = months.map((month, index) => `<text x="${x(index)}" y="207" text-anchor="middle">${new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</text>`).join("");
   const legend = lines.map((line) => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("");
   const wave = $("#waveChart");

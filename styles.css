@@ -499,3 +499,8 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
 .topbar-title h1 { order: 1; }
 .topbar-title .eyebrow { order: 2; }
 .dashboard-welcome { margin-top: 0; }
+
+/* Greeting and visible wave chart */
+.dashboard-year { display: none; }
+.wave-chart polyline { vector-effect: non-scaling-stroke; }
+.wave-chart circle { vector-effect: non-scaling-stroke; }
