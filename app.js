@@ -452,7 +452,8 @@ function renderAgenda() {
   const list = $("#appointmentList");
   if (!list) return;
   const month = els.monthFilter.value;
-  const appointments = state.appointments.filter((item) => item.date.startsWith(month)).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+  const profile = els.profileFilter.value;
+  const appointments = state.appointments.filter((item) => item.date.startsWith(month) && (item.profile || "Casa") === profile).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
   $("#agendaCount").textContent = `${appointments.length} ${appointments.length === 1 ? "compromisso" : "compromissos"}`;
   $("#agendaPeriod").textContent = new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   list.innerHTML = appointments.length ? appointments.map((item) => `<article class="appointment-row"><div class="appointment-date"><strong>${item.time}</strong><span>${formatDate(item.date)}</span></div><div><strong>${escapeHtml(item.description)}</strong>${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><div class="row-actions"><button class="small-button action-edit" data-appointment-action="edit" data-appointment-id="${item.id}" type="button">Editar</button><button class="small-button action-delete" data-appointment-action="delete" data-appointment-id="${item.id}" type="button">Excluir</button></div></article>`).join("") : '<p class="muted empty-state">Nenhum compromisso neste mes.</p>';
@@ -982,7 +983,7 @@ $("#appointmentForm").addEventListener("submit", async (event) => {
   setMessage($("#agendaMessage"));
   const form = event.currentTarget;
   const id = form.elements.id.value;
-  const appointment = { date: form.elements.date.value, time: form.elements.time.value, description: form.elements.description.value.trim(), notes: form.elements.notes.value.trim() };
+  const appointment = { date: form.elements.date.value, time: form.elements.time.value, description: form.elements.description.value.trim(), notes: form.elements.notes.value.trim(), profile: els.profileFilter.value };
   try {
     const saved = await api(id ? `/api/appointments/${id}` : "/api/appointments", { method: id ? "PUT" : "POST", body: JSON.stringify(appointment) });
     if (id) state.appointments[state.appointments.findIndex((item) => item.id === id)] = saved; else state.appointments.push(saved);

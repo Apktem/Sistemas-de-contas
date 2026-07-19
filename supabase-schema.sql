@@ -204,9 +204,12 @@ create table if not exists public.appointments (
   appointment_time time not null,
   description text not null check (char_length(description) between 2 and 180),
   notes text,
+  profile text not null default 'Casa' check (profile in ('Casa', 'Empresa')),
   notified_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.appointments add column if not exists profile text not null default 'Casa' check (profile in ('Casa', 'Empresa'));
+create index if not exists appointments_user_profile_date_idx on public.appointments(user_id, profile, appointment_date, appointment_time);
 create index if not exists appointments_user_date_idx on public.appointments(user_id, appointment_date, appointment_time);
 
 alter table public.notification_deliveries add column if not exists source_type text not null default 'bill';

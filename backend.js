@@ -33,7 +33,7 @@ const accountantSchema = z.object({ email: z.string().trim().email().max(320) })
 const shoppingItemSchema = z.object({ name: z.string().trim().min(1).max(100), category: z.string().trim().min(2).max(40), quantity: z.coerce.number().positive().max(9999), unit: z.enum(["un", "kg", "g", "L", "ml", "pct", "cx"]) });
 const shoppingUpdateSchema = z.object({ checked: z.boolean() });
 const shoppingCheckoutSchema = z.object({ amount: z.coerce.number().positive().max(999999999.99), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
-const appointmentSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), time: z.string().regex(/^\d{2}:\d{2}$/), description: z.string().trim().min(2).max(180), notes: z.string().trim().max(500).optional().default("") });
+const appointmentSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), time: z.string().regex(/^\d{2}:\d{2}$/), description: z.string().trim().min(2).max(180), notes: z.string().trim().max(500).optional().default(""), profile: z.enum(profiles).optional().default("Casa") });
 const financialEntrySchema = z.object({
   type: z.enum(["income", "variable_expense", "receivable"]),
   profile: z.enum(profiles),
@@ -219,7 +219,7 @@ export async function createApp(options = {}) {
   app.get("/api/data", authenticate, asyncRoute(async (req, res) => {
     const [data, access] = await Promise.all([listDataWithRecurringHorizon(req.user), getAccess(req.user)]);
     if (access.plan === "pro") return res.json(data);
-    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa"), categories: data.categories || [], financialEntries: (data.financialEntries || []).filter((entry) => entry.profile === "Casa"), shoppingItems: data.shoppingItems || [], appointments: data.appointments || [] });
+    return res.json({ bills: data.bills.filter((bill) => bill.profile === "Casa"), cards: data.cards.filter((card) => card.profile === "Casa"), incomes: data.incomes.filter((income) => income.profile === "Casa"), categories: data.categories || [], financialEntries: (data.financialEntries || []).filter((entry) => entry.profile === "Casa"), shoppingItems: data.shoppingItems || [], appointments: (data.appointments || []).filter((item) => (item.profile || "Casa") === "Casa") });
   }));
   app.post("/api/categories", authenticate, asyncRoute(async (req, res) => {
     const { name } = categorySchema.parse(req.body);
@@ -257,8 +257,8 @@ export async function createApp(options = {}) {
     return res.status(204).end();
   }));
 
-  app.post("/api/appointments", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createAppointment(req.user.id, appointmentSchema.parse(req.body)))));
-  app.put("/api/appointments/:id", authenticate, asyncRoute(async (req, res) => { const item = await storage.updateAppointment(req.user.id, req.params.id, appointmentSchema.parse(req.body)); return item ? res.json(item) : res.status(404).json({ error: "Compromisso nao encontrado." }); }));
+  app.post("/api/appointments", authenticate, asyncRoute(async (req, res) => { const input = appointmentSchema.parse(req.body); await ensureProfileAccess(req.user, input.profile); return res.status(201).json(await storage.createAppointment(req.user.id, input)); }));
+  app.put("/api/appointments/:id", authenticate, asyncRoute(async (req, res) => { const input = appointmentSchema.parse(req.body); await ensureProfileAccess(req.user, input.profile); const item = await storage.updateAppointment(req.user.id, req.params.id, input); return item ? res.json(item) : res.status(404).json({ error: "Compromisso nao encontrado." }); }));
   app.delete("/api/appointments/:id", authenticate, asyncRoute(async (req, res) => (await storage.deleteAppointment(req.user.id, req.params.id)) ? res.status(204).end() : res.status(404).json({ error: "Compromisso nao encontrado." })));
 
   app.post("/api/shopping-items", authenticate, asyncRoute(async (req, res) => res.status(201).json(await storage.createShoppingItem(req.user.id, shoppingItemSchema.parse(req.body)))));

@@ -424,8 +424,8 @@ class SupabaseStorage {
   }
 }
 
-function toAppointmentRow(id, userId, data) { return { id, user_id: userId, appointment_date: data.date, appointment_time: data.time, description: data.description, notes: data.notes || null }; }
-function mapAppointment(row) { return { id: row.id, userId: row.user_id || row.userId, date: row.appointment_date || row.date, time: String(row.appointment_time || row.time).slice(0, 5), description: row.description, notes: row.notes || "", notifiedAt: row.notified_at || row.notifiedAt || null, createdAt: row.created_at || row.createdAt }; }
+function toAppointmentRow(id, userId, data) { return { id, user_id: userId, appointment_date: data.date, appointment_time: data.time, description: data.description, notes: data.notes || null, profile: data.profile || "Casa" }; }
+function mapAppointment(row) { return { id: row.id, userId: row.user_id || row.userId, date: row.appointment_date || row.date, time: String(row.appointment_time || row.time).slice(0, 5), description: row.description, notes: row.notes || "", profile: row.profile || "Casa", notifiedAt: row.notified_at || row.notifiedAt || null, createdAt: row.created_at || row.createdAt }; }
 function mapShoppingItem(row) { return { id: row.id, userId: row.user_id || row.userId, name: row.name, category: row.category, quantity: Number(row.quantity), unit: row.unit, checked: Boolean(row.checked), createdAt: row.created_at || row.createdAt }; }
 function toFinancialEntryRow(id, userId, data) { return { id, user_id: userId, entry_type: data.type, profile: data.profile, description: data.description, amount: data.amount, entry_date: data.date, category: data.category, status: data.status, notes: data.notes || null }; }
 function mapFinancialEntry(row) { return { id: row.id, userId: row.user_id || row.userId, type: row.entry_type || row.type, profile: row.profile, description: row.description, amount: Number(row.amount), date: row.entry_date || row.date, category: row.category, status: row.status, notes: row.notes || "", createdAt: row.created_at || row.createdAt }; }
