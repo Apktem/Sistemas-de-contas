@@ -118,7 +118,7 @@ async function enterApp(user) {
   } else if (new URLSearchParams(location.search).get("abrir") === "lembretes") {
     history.replaceState({}, "", location.pathname);
     switchView("reminders", "Lembretes");
-  } else switchView("dashboard", "Painel");
+  } else switchView("dashboard", "Dashboard");
   setTimeout(showInstallPrompt, 900);
 }
 
