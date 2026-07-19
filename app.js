@@ -1,3 +1,4 @@
+import { dashboardMonthSummary } from "./dashboard.js";
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const decimalMoney = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const shoppingCatalog = {
@@ -272,6 +273,7 @@ function renderDashboardNavigation() {
 
 function render() {
   renderDashboardNavigation();
+  renderDashboardShortcuts();
   renderMetrics();
   renderChart();
   renderIncome();
@@ -287,6 +289,26 @@ function render() {
   renderForecast();
 }
 
+function dashboardMonthData() {
+  return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month: els.monthFilter.value, profile: els.profileFilter.value });
+}
+
+function renderDashboardShortcuts() {
+  const data = dashboardMonthData();
+  const sum = (items, field = "amount") => items.reduce((total, item) => total + Number(item[field] || 0), 0);
+  $("#dashboardBillsTotal").textContent = money.format(sum(data.bills));
+  $("#dashboardBillsDetail").textContent = `${data.bills.length} ${data.bills.length === 1 ? "conta" : "contas"}`;
+  $("#dashboardReceivablesTotal").textContent = money.format(sum(data.pendingReceivables));
+  $("#dashboardReceivablesDetail").textContent = `${data.pendingReceivables.length} ${data.pendingReceivables.length === 1 ? "pendente" : "pendentes"}`;
+  $("#dashboardReceivedTotal").textContent = money.format(sum(data.received));
+  $("#dashboardReceivedDetail").textContent = `${data.received.length} ${data.received.length === 1 ? "recebido" : "recebidos"}`;
+  $("#dashboardVariableTotal").textContent = money.format(sum(data.variableExpenses));
+  $("#dashboardVariableDetail").textContent = `${data.variableExpenses.length} ${data.variableExpenses.length === 1 ? "lan\u00e7amento" : "lan\u00e7amentos"}`;
+  const cardLimit = sum(data.cards, "limit"), cardUsed = sum(data.cards, "used");
+  const cardPercent = cardLimit ? Math.round((cardUsed / cardLimit) * 100) : 0;
+  $("#dashboardCardsUsed").textContent = money.format(cardUsed);
+  $("#dashboardCardsDetail").textContent = `${money.format(cardLimit)} de limite - ${cardPercent}% usado`;
+}
 function renderMetrics() {
   const bills = getFilteredBills();
   const groups = {
@@ -369,7 +391,7 @@ function renderIncome() {
   $("#incomeAmountLabel").textContent = isCompany ? "Receita da Empresa" : "Renda da Casa";
   const income = state.incomes.find((item) => item.month === els.monthFilter.value && item.profile === els.profileFilter.value);
   const amount = Number(income?.amount || 0);
-  const expenses = getFilteredBills().reduce((sum, bill) => sum + Number(bill.amount), 0);
+  const expenses = dashboardMonthData().expenseTotal;
   const remaining = amount - expenses;
   const percent = amount > 0 ? Math.round((expenses / amount) * 100) : 0;
   $("#monthlyIncome").value = amount ? decimalMoney.format(amount) : "";
@@ -563,10 +585,9 @@ function setCardDateDefaults() {
   if (!$("#cardDueDay").value) $("#cardDueDay").value = `${month}-25`;
 }
 function renderCards() {
-  const profile = els.profileFilter.value;
-  const cards = state.cards.filter((card) => card.profile === profile);
+  const cards = dashboardMonthData().cards;
   $("#cardList").innerHTML = cards.length ? cards.map((card) => {
-    const used = getFilteredBills().filter((bill) => bill.category === "Cartao" && bill.name.toLowerCase().includes(card.name.split(" ")[0].toLowerCase())).reduce((sum, bill) => sum + Number(bill.amount), 0);
+    const used = card.used;
     const percent = Math.min(100, Math.round((used / Number(card.limit || 1)) * 100));
     return `<article class="card-item"><div><strong>${escapeHtml(card.name)}</strong><p class="muted">Vence dia ${card.dueDay} · fecha dia ${card.closeDay}</p></div><div class="progress"><span style="width:${percent}%"></span></div><small>${money.format(used)} usado de ${money.format(Number(card.limit))}</small><button class="small-button" data-card-delete="${card.id}" type="button">Excluir cartão</button></article>`;
   }).join("") : '<section class="panel"><p class="muted">Nenhum cartão cadastrado.</p></section>';
@@ -826,6 +847,12 @@ $("#upgradeLater").addEventListener("click", () => $("#upgradeDialog").close());
 $("#upgradeToPro").addEventListener("click", () => { $("#upgradeDialog").close(); switchView("subscription", "Assinatura"); closeMobileMenu(); });
 window.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobileMenu(); });
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => { switchView(button.dataset.view, button.textContent.trim()); closeMobileMenu(); }));
+$("#dashboardView").addEventListener("click", (event) => {
+  const shortcut = event.target.closest("[data-dashboard-view]");
+  if (!shortcut) return;
+  const titles = { bills: "Contas a pagar", receivables: "Contas a receber", incomeEntries: "Recebimentos", variableExpenses: "Gastos vari\u00e1veis", cards: "Cart\u00f5es" };
+  switchView(shortcut.dataset.dashboardView, titles[shortcut.dataset.dashboardView]);
+});
 els.monthFilter.addEventListener("change", () => { resetBillForm(); els.cardForm.reset(); setCardDateDefaults(); render(); });
 $("#monthTabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-month-value]");
