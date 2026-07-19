@@ -175,6 +175,7 @@ async function loadData() {
   state.categories = data.categories || [];
   state.financialEntries = data.financialEntries || [];
   state.shoppingItems = data.shoppingItems || [];
+  state.appointments = data.appointments || [];
   render();
 }
 
@@ -313,6 +314,7 @@ function render() {
   renderCategoryOptions();
   renderCards();
   renderForecast();
+  renderAgenda();
 }
 
 function dashboardMonthData() {
