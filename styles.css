@@ -468,3 +468,27 @@ html[data-theme="dark"] .radial-chart { background: conic-gradient(var(--ring-co
   .dashboard-shortcuts { grid-template-columns: 1fr; }
   .dashboard-shortcut.cards { grid-column: auto; }
 }
+
+/* Dashboard alignment and agenda */
+.nav-list { gap: 2px; padding-right: 0; }
+.nav-section-label { padding: 0 10px; }
+.nav-item { display: flex; align-items: center; border-radius: 6px; }
+.dashboard-welcome { margin: -4px 0 8px; align-items: center; }
+.dashboard-shortcuts { margin-bottom: 0; }
+.chart-extra-grid { align-items: stretch; }
+.financial-mix-chart, .appointment-list { display: grid; gap: 10px; }
+.wave-chart { display: grid; gap: 10px; min-height: 260px; }
+.wave-chart svg { width: 100%; height: 220px; }
+.wave-chart polyline { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.wave-chart text { fill: var(--muted); font-size: 12px; }
+.wave-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; color: var(--muted); font-size: .82rem; }
+.wave-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.wave-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.appointment-form { grid-template-columns: 150px 130px minmax(220px, 1fr) minmax(180px, 1fr) auto auto; }
+.appointment-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 13px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfc; }
+.appointment-date { display: grid; gap: 3px; color: var(--brand); }
+.appointment-date strong { font-size: 1.05rem; }
+.appointment-date span, .appointment-row small { color: var(--muted); font-size: .78rem; }
+.appointment-row > div:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+@media (max-width: 1180px) { .appointment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .appointment-row { grid-template-columns: 1fr; } .appointment-row .row-actions { justify-content: start; } }

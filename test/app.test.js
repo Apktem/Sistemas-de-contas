@@ -355,6 +355,28 @@ test("cliente envia feedback e administrador responde sem expor mensagens de ter
   assert.equal((await get(base, "/api/feedback", client.cookie)).body.feedbacks[0].response, "Obrigado pela avaliação!");
   assert.equal((await get(base, "/api/admin/feedback", client.cookie)).status, 403);
 });
+test("agenda isola compromissos por usuario e notifica no horario", async (context) => {
+  const storage = new MemoryStorage();
+  const app = await createApp({ storage, sessionSecret: "test-session-secret-with-more-than-32-characters", cpfPepper: "test-cpf-pepper-with-more-than-32-characters", env: { ADMIN_EMAIL: "admin@example.com" } });
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const first = await post(base, "/api/register", { identifier: "agenda1@example.com", password: "SenhaForte123" });
+  const second = await post(base, "/api/register", { identifier: "agenda2@example.com", password: "SenhaForte123" });
+  const created = await post(base, "/api/appointments", { date: "2026-07-19", time: "18:30", description: "Reuniao com cliente", notes: "Levar contrato" }, first.cookie);
+  assert.equal(created.status, 201);
+  assert.equal((await get(base, "/api/data", first.cookie)).body.appointments.length, 1);
+  assert.equal((await get(base, "/api/data", second.cookie)).body.appointments.length, 0);
+  await storage.upsertNotificationPreferences(first.body.user.id, { pushEnabled: true, reminderDays: 2 });
+  await storage.upsertPushSubscription(first.body.user.id, { endpoint: "https://push.example/agenda", keys: { p256dh: "public-key", auth: "auth-key" } });
+  let sends = 0;
+  const push = { configured: true, async send(_subscription, reminder) { sends += 1; assert.equal(reminder.type, "appointment"); } };
+  assert.deepEqual(await runPushDispatch(storage, push, new Date("2026-07-19T18:29:00")), { sent: 0, failed: 0 });
+  assert.deepEqual(await runPushDispatch(storage, push, new Date("2026-07-19T18:31:00")), { sent: 1, failed: 0 });
+  assert.deepEqual(await runPushDispatch(storage, push, new Date("2026-07-19T18:40:00")), { sent: 0, failed: 0 });
+  assert.equal(sends, 1);
+});
 test("envia cada notificação push uma unica vez", async () => {
   const storage = new MemoryStorage();
   const user = await storage.createUser({ email: "alerta@example.com", lookup: "alerta@example.com", identifierType: "email", identifierLabel: "alerta@example.com", passwordHash: "hash", role: "user" });

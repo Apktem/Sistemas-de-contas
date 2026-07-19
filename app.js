@@ -26,7 +26,7 @@ function formatMoneyInput(value, forceDecimals = false) {
 function parseMoneyInput(value) {
   return Number(String(value || "0").replace(/\./g, "").replace(",", "."));
 }
-const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [], categories: [], financialEntries: [], accountants: [], accountantCompanies: [], accountantReport: null, shoppingItems: [], shoppingCategory: "Mercearia" };
+const state = { user: null, bills: [], cards: [], incomes: [], adminUsers: [], selectedAdminUser: null, subscription: null, notificationPreferences: null, feedbacks: [], adminFeedbacks: [], categories: [], financialEntries: [], accountants: [], accountantCompanies: [], accountantReport: null, shoppingItems: [], appointments: [], shoppingCategory: "Mercearia" };
 let pixPollTimer = null;
 let deferredInstallPrompt = null;
 const installDismissedKey = "ricoxp-install-dismissed-at-v2";
@@ -394,6 +394,56 @@ function sumByStatus(bills, status) {
   return bills.filter((bill) => billSituation(bill) === status).reduce((sum, bill) => sum + Number(bill.amount), 0);
 }
 
+function renderFinanceCharts() {
+  const data = dashboardMonthData();
+  const sum = (items, field = "amount") => items.reduce((total, item) => total + Number(item[field] || 0), 0);
+  const values = [
+    { label: "Contas a pagar", value: sum(data.bills), color: "#d8911c" },
+    { label: "Contas a receber", value: sum(data.pendingReceivables), color: "#18aee8" },
+    { label: "Recebimentos", value: sum(data.received), color: "#209869" },
+    { label: "Gastos variaveis", value: sum(data.variableExpenses), color: "#7968c8" },
+    { label: "Cartoes", value: sum(data.cards, "used"), color: "#115e59" },
+  ];
+  const max = Math.max(...values.map((item) => item.value), 1);
+  const mix = $("#financialMixChart");
+  if (mix) mix.innerHTML = values.map((item) => `<div class="category-row"><span>${item.label}</span><div><i style="width:${Math.round((item.value / max) * 100)}%;background:${item.color}"></i></div><strong>${money.format(item.value)}</strong></div>`).join("");
+  const profile = els.profileFilter.value;
+  const months = Array.from({ length: 6 }, (_, index) => monthKeyFromOffset(els.monthFilter.value, index - 5));
+  const lines = [
+    { label: "Recebidos", color: "#209869", value(month) { return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month, profile }).receivedTotal; } },
+    { label: "Despesas", color: "#d8911c", value(month) { return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month, profile }).expenseTotal; } },
+    { label: "Cartoes", color: "#115e59", value(month) { return dashboardMonthSummary({ bills: state.bills, entries: state.financialEntries, cards: state.cards, month, profile }).cards.reduce((total, card) => total + Number(card.used || 0), 0); } },
+  ].map((line) => ({ ...line, points: months.map((month) => ({ month, value: line.value(month) })) }));
+  const maxWave = Math.max(...lines.flatMap((line) => line.points.map((point) => point.value)), 1);
+  const left = 42, right = 696, top = 18, bottom = 176;
+  const x = (index) => left + (index * (right - left) / (months.length - 1));
+  const y = (value) => bottom - ((value / maxWave) * (bottom - top));
+  const paths = lines.map((line) => `<polyline points="${line.points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ")}" style="stroke:${line.color}" />`).join("");
+  const labels = months.map((month, index) => `<text x="${x(index)}" y="207" text-anchor="middle">${new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</text>`).join("");
+  const legend = lines.map((line) => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("");
+  const wave = $("#waveChart");
+  if (wave) wave.innerHTML = `<svg viewBox="0 0 740 220" preserveAspectRatio="none" aria-hidden="true"><g class="forecast-grid"><line x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" /><line x1="${left}" y1="96" x2="${right}" y2="96" /><line x1="${left}" y1="${top}" x2="${right}" y2="${top}" /></g>${paths}${labels}</svg><div class="wave-legend">${legend}</div>`;
+}
+
+function renderAgenda() {
+  const list = $("#appointmentList");
+  if (!list) return;
+  const month = els.monthFilter.value;
+  const appointments = state.appointments.filter((item) => item.date.startsWith(month)).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+  $("#agendaCount").textContent = `${appointments.length} ${appointments.length === 1 ? "compromisso" : "compromissos"}`;
+  $("#agendaPeriod").textContent = new Date(`${month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  list.innerHTML = appointments.length ? appointments.map((item) => `<article class="appointment-row"><div class="appointment-date"><strong>${item.time}</strong><span>${formatDate(item.date)}</span></div><div><strong>${escapeHtml(item.description)}</strong>${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><div class="row-actions"><button class="small-button action-edit" data-appointment-action="edit" data-appointment-id="${item.id}" type="button">Editar</button><button class="small-button action-delete" data-appointment-action="delete" data-appointment-id="${item.id}" type="button">Excluir</button></div></article>`).join("") : '<p class="muted empty-state">Nenhum compromisso neste mes.</p>';
+}
+
+function resetAppointmentForm() {
+  const form = $("#appointmentForm");
+  if (!form) return;
+  form.reset();
+  form.elements.id.value = "";
+  form.elements.date.value = new Date().toLocaleDateString("en-CA");
+  form.elements.time.value = "09:00";
+  $("#cancelAppointmentEdit").classList.add("hidden");
+}
 function renderIncome() {
   const isCompany = els.profileFilter.value === "Empresa";
   $("#incomePanelTitle").textContent = isCompany ? "Receita mensal da Empresa" : "Renda mensal da Casa";
@@ -875,6 +925,7 @@ $("#monthTabs").addEventListener("click", (event) => {
   setCardDateDefaults();
   render();
 });
+resetAppointmentForm();
 ["#upcomingList", "#reminderList"].forEach((selector) => $(selector).addEventListener("click", (event) => {
   const target = event.target.closest("[data-bill-link]");
   if (target) openBillFromDashboard(target.dataset.billLink);

@@ -196,3 +196,24 @@ alter table public.feedbacks enable row level security;
 revoke all on public.users, public.bills, public.cards, public.user_categories, public.financial_entries, public.accountant_accesses, public.shopping_items, public.monthly_incomes, public.subscriptions, public.notification_preferences, public.notification_deliveries, public.push_subscriptions from anon, authenticated;
 revoke all on public.password_reset_tokens from anon, authenticated;
 revoke all on public.feedbacks from anon, authenticated;
+
+create table if not exists public.appointments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  appointment_date date not null,
+  appointment_time time not null,
+  description text not null check (char_length(description) between 2 and 180),
+  notes text,
+  notified_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists appointments_user_date_idx on public.appointments(user_id, appointment_date, appointment_time);
+
+alter table public.notification_deliveries add column if not exists source_type text not null default 'bill';
+alter table public.notification_deliveries add column if not exists source_id uuid;
+update public.notification_deliveries set source_id = bill_id where source_id is null;
+alter table public.notification_deliveries alter column bill_id drop not null;
+create unique index if not exists notification_deliveries_source_idx on public.notification_deliveries(source_type, source_id, channel, scheduled_for);
+
+alter table public.appointments enable row level security;
+revoke all on public.appointments from anon, authenticated;

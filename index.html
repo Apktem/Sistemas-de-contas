@@ -108,6 +108,7 @@
           <button class="nav-item" data-view="bills" type="button">Contas a pagar</button>
           <button class="nav-item" data-view="cards" type="button">Cartões</button>
           <button class="nav-item" data-view="reminders" type="button">Lembretes</button>
+          <button class="nav-item" data-view="agenda" type="button">Agenda</button>
           <span class="nav-section-label">Ferramentas</span>
           <button class="nav-item" data-view="shopping" data-area-only="Casa" type="button">Lista de compras</button>
           <button class="nav-item" data-view="dre" data-area-only="Empresa" type="button">DRE</button>
@@ -254,6 +255,11 @@
             <p id="pushHelp" class="muted notification-help">No iPhone, adicione o sistema à Tela de Início antes de ativar.</p>
           </section>
           <section class="panel"><div class="panel-title"><h2>Lembretes</h2><span>Organizado por urgência</span></div><div id="reminderList" class="stack-list"></div></section>
+        </section>
+
+        <section id="agendaView" class="view">
+          <section class="panel form-panel"><div class="panel-title"><div><h2>Novo compromisso</h2><p class="muted">Cadastre data, horario e descricao do compromisso.</p></div><strong id="agendaCount">0 compromissos</strong></div><form id="appointmentForm" class="data-form appointment-form"><input name="id" type="hidden" /><label>Data<input name="date" type="date" required /></label><label>Horario<input name="time" type="time" required /></label><label class="appointment-description">Compromisso<input name="description" type="text" maxlength="180" placeholder="Ex: Reuniao com cliente" required /></label><label>Observacao<input name="notes" type="text" maxlength="500" placeholder="Opcional" /></label><button class="primary-button" type="submit">Salvar compromisso</button><button id="cancelAppointmentEdit" class="ghost-button hidden" type="button">Cancelar edicao</button></form><p id="agendaMessage" class="form-message" aria-live="polite"></p></section>
+          <section class="panel"><div class="panel-title"><h2>Agenda do mes</h2><span id="agendaPeriod">Mes exibido</span></div><div id="appointmentList" class="appointment-list"></div></section>
         </section>
 
         <section id="shoppingView" class="view">

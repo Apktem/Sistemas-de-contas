@@ -28,11 +28,11 @@ export class WebPushService {
 export async function runPushDispatch(storage, push, today = new Date()) {
   if (!push.configured) return { sent: 0, failed: 0 };
   const date = toDateOnly(today);
-  const reminders = await storage.listPushReminders(date);
+  const reminders = await storage.listPushReminders(date, toTimeOnly(today));
   let sent = 0;
   let failed = 0;
   for (const reminder of reminders) {
-    const existing = await storage.getNotificationDelivery(reminder.bill.id, date);
+    const existing = await storage.getNotificationDelivery(reminder.sourceId || reminder.bill.id, date, reminder.type || "bill");
     if (existing?.status === "sent") continue;
     const subscriptions = await storage.listPushSubscriptions(reminder.userId);
     if (!subscriptions.length) continue;
@@ -49,7 +49,9 @@ export async function runPushDispatch(storage, push, today = new Date()) {
     }
     await storage.recordNotificationDelivery({
       userId: reminder.userId,
-      billId: reminder.bill.id,
+      billId: reminder.type === "bill" ? reminder.bill.id : null,
+      sourceType: reminder.type || "bill",
+      sourceId: reminder.sourceId || reminder.bill.id,
       scheduledFor: date,
       status: delivered ? "sent" : "failed",
       providerMessageId: null,
@@ -64,7 +66,7 @@ export async function runPushDispatch(storage, push, today = new Date()) {
 export function startPushWorker(storage, push, logger = console) {
   const execute = () => runPushDispatch(storage, push).catch((error) => logger.error("Falha nas notificações push:", error));
   const initial = setTimeout(execute, 15_000);
-  const interval = setInterval(execute, sixHours);
+  const interval = setInterval(execute, 15 * 60 * 1000);
   initial.unref?.();
   interval.unref?.();
   return () => { clearTimeout(initial); clearInterval(interval); };
@@ -74,6 +76,7 @@ function toDateOnly(value) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+function toTimeOnly(value) { const date = new Date(value); return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`; }
 function formatMoney(value) { return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function formatDate(value) { return new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR"); }
 function serviceError(message, status) { const error = new Error(message); error.status = status; return error; }
