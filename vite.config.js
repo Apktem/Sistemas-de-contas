@@ -13,6 +13,7 @@ export default defineConfig({
         landing: resolve("landing.html"),
         privacy: resolve("privacy.html"),
         cronometroPrivacy: resolve("cronometro-flutuante/politica-de-privacidade.html"),
+        cronometroPrivacyIndex: resolve("cronometro-flutuante/politica-de-privacidade/index.html"),
       },
     },
   },
