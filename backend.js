@@ -526,6 +526,7 @@ export async function createApp(options = {}) {
   const pageRoot = hasBuild ? distRoot : root;
   app.get("/", (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "landing.html")); });
   app.get(["/privacy", "/privacy/", "/privacidade", "/privacidade/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "privacy.html")); });
+  app.get(["/cronometro-flutuante/politica-de-privacidade", "/cronometro-flutuante/politica-de-privacidade/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "cronometro-flutuante", "politica-de-privacidade.html")); });
   app.get(["/login", "/login/"], (_req, res) => { noStoreAppShell(res); res.sendFile(path.join(pageRoot, "index.html")); });
   app.use((req, res, next) => { if (req.method === "GET" && req.accepts("html")) { noStoreAppShell(res); return res.sendFile(path.join(pageRoot, "index.html")); } return next(); });
   app.use((error, _req, res, _next) => {
